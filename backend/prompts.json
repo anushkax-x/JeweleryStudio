@@ -1,0 +1,17 @@
+[
+  {
+    "id": "1",
+    "title": "Luxury catalogue",
+    "prompt": "Premium luxury editorial quality, subtle sparkle on metal and gemstones, refined color grading. Use an Indian female model with authentic features when a model is shown."
+  },
+  {
+    "id": "2",
+    "title": "Warm editorial",
+    "prompt": "Warm golden-hour inspired lighting, soft cinematic shadows, intimate editorial vibes, focus on reflections."
+  },
+  {
+    "id": "3",
+    "title": "Cool studio",
+    "prompt": "Cool crisp studio lighting, high contrast, minimalist setting highlighting metallic shine."
+  }
+]
