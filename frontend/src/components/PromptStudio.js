@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function PromptStudio({ 
   currentPrompt, setCurrentPrompt,
   modelCentric, setModelCentric,
@@ -12,7 +14,7 @@ export default function PromptStudio({
 
   const fetchPrompts = async () => {
     try {
-      const res = await fetch('http://localhost:3001/prompts');
+      const res = await fetch(`${API_BASE_URL}/prompts`);
       const data = await res.json();
       setPrompts(data);
       if (data.length > 0 && !activePromptId) {
@@ -36,7 +38,7 @@ export default function PromptStudio({
   const handleSave = async () => {
     if (!currentPrompt.trim() || !currentTitle.trim()) return;
     try {
-      await fetch('http://localhost:3001/prompts', {
+      await fetch(`${API_BASE_URL}/prompts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -54,7 +56,7 @@ export default function PromptStudio({
   const handleDelete = async () => {
     if (!activePromptId) return;
     try {
-      await fetch(`http://localhost:3001/prompts/${activePromptId}`, {
+      await fetch(`${API_BASE_URL}/prompts/${activePromptId}`, {
         method: 'DELETE'
       });
       setActivePromptId(null);

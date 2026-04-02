@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+
 export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedProduct }) {
   const [jewelleryImage, setJewelleryImage] = useState(null);
   const [modelImage, setModelImage] = useState(null);
@@ -26,7 +28,7 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
 
   const generateImage = async (index) => {
     try {
-      const res = await fetch('http://localhost:3001/generate-image', {
+      const res = await fetch(`${API_BASE_URL}/generate-image`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: currentPrompt || 'Generate photoshoot' }),
