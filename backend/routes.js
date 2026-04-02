@@ -32,6 +32,14 @@ module.exports = function (fastify) {
     return { success: true };
   });
 
+  fastify.delete('/prompts/:id', async (request, reply) => {
+    const { id } = request.params;
+    let prompts = JSON.parse(fs.readFileSync(promptsFilePath, 'utf8') || '[]');
+    prompts = prompts.filter(p => p.id !== id);
+    fs.writeFileSync(promptsFilePath, JSON.stringify(prompts));
+    return { success: true };
+  });
+
   fastify.post('/generate-image', async (request, reply) => {
     try {
       const { jewelleryImage, modelImage, prompt, type } = request.body;

@@ -1,28 +1,28 @@
-import Head from 'next/head';
-import JewelleryStudio from '../components/JewelleryStudio';
-import PromptStudio from '../components/PromptStudio';
+import Head from "next/head";
+import JewelleryStudio from "../components/JewelleryStudio";
+import PromptStudio from "../components/PromptStudio";
 
 export default function Home() {
   return (
-    <div className="app-container">
+    <>
       <Head>
-        <title>Jewellery studio</title>
-        <meta name="description" content="AI Powered Jewellery Photoshoot Studio" />
+        <title>Aura | Jewellery Photoshoot Studio</title>
       </Head>
+      <div className="max-w-[1100px] mx-auto py-8 px-[3%]">
+        <header className="mb-8">
+          <h1 className="text-[1.8rem] font-semibold text-text-primary tracking-tight mb-2">Aura</h1>
+          <p className="text-[0.95rem] text-text-secondary">AI Jewellery Photoshoot Studio</p>
+        </header>
 
-      <header className="main-header">
-        <h1 className="brand-logo">Jewellery studio</h1>
-        <p className="brand-tagline">Upload reference photos, pick a jewellery type, then generate an AI photoshoot in parallel. Your Gemini API key stays on the server.</p>
-      </header>
-
-      <main className="main-layout">
-        <div className="column left-column">
-          <JewelleryStudio />
+        <div className="flex gap-8 items-start flex-col lg:flex-row">
+          <div className="flex-1 min-w-0 w-full">
+            <JewelleryStudio />
+          </div>
+          <div className="flex-[0_0_400px] min-w-0 w-full lg:w-[400px]">
+            <PromptStudio />
+          </div>
         </div>
-        <div className="column right-column">
-          <PromptStudio />
-        </div>
-      </main>
-    </div>
+      </div>
+    </>
   );
 }
