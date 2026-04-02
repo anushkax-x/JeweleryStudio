@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 
-export default function PromptStudio() {
+export default function PromptStudio({ 
+  currentPrompt, setCurrentPrompt,
+  modelCentric, setModelCentric,
+  enhancedProduct, setEnhancedProduct 
+}) {
   const [prompts, setPrompts] = useState([]);
-  const [currentPrompt, setCurrentPrompt] = useState('');
   const [currentTitle, setCurrentTitle] = useState('');
   const [activePromptId, setActivePromptId] = useState(null);
-  
-  const [modelCentric, setModelCentric] = useState(2);
-  const [enhancedProduct, setEnhancedProduct] = useState(1);
   const [isCollapsed, setIsCollapsed] = useState(true);
 
   const fetchPrompts = async () => {

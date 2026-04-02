@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 
-export default function JewelleryStudio() {
+export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedProduct }) {
   const [jewelleryImage, setJewelleryImage] = useState(null);
   const [modelImage, setModelImage] = useState(null);
   const [type, setType] = useState('');
   const [images, setImages] = useState([]);
-  const [loadingStates, setLoadingStates] = useState([false, false, false]);
+  const [loadingStates, setLoadingStates] = useState([]);
   const [enlargedImage, setEnlargedImage] = useState(null);
 
   const handleJewelleryUpload = (e) => {
@@ -29,7 +29,7 @@ export default function JewelleryStudio() {
       const res = await fetch('http://localhost:3001/generate-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: 'Generate photoshoot' }),
+        body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: currentPrompt || 'Generate photoshoot' }),
       });
       const data = await res.json();
       
@@ -50,9 +50,10 @@ export default function JewelleryStudio() {
   };
 
   const handleGenerate = () => {
-    setImages([null, null, null]);
-    setLoadingStates([true, true, true]);
-    for (let i = 0; i < 3; i++) {
+    const numToGenerate = Math.max(1, (modelCentric || 0) + (enhancedProduct || 0));
+    setImages(Array(numToGenerate).fill(null));
+    setLoadingStates(Array(numToGenerate).fill(true));
+    for (let i = 0; i < numToGenerate; i++) {
         generateImage(i);
     }
   };

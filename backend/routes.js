@@ -18,7 +18,7 @@ module.exports = function (fastify) {
     let prompts = JSON.parse(fs.readFileSync(promptsFilePath, 'utf8') || '[]');
     
     if (id) {
-      const idx = prompts.findIndex(p => p.id === id);
+      const idx = prompts.findIndex(p => String(p.id) === String(id));
       if (idx !== -1) {
         prompts[idx].prompt = prompt;
         if (title) prompts[idx].title = title;
@@ -35,7 +35,7 @@ module.exports = function (fastify) {
   fastify.delete('/prompts/:id', async (request, reply) => {
     const { id } = request.params;
     let prompts = JSON.parse(fs.readFileSync(promptsFilePath, 'utf8') || '[]');
-    prompts = prompts.filter(p => p.id !== id);
+    prompts = prompts.filter(p => String(p.id) !== String(id));
     fs.writeFileSync(promptsFilePath, JSON.stringify(prompts));
     return { success: true };
   });
