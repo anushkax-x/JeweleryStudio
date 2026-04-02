@@ -9,13 +9,17 @@ export default function JewelleryStudio() {
 
   const handleJewelleryUpload = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setJewelleryImage(URL.createObjectURL(e.target.files[0]));
+      const reader = new FileReader();
+      reader.onload = (ev) => setJewelleryImage(ev.target.result);
+      reader.readAsDataURL(e.target.files[0]);
     }
   };
 
   const handleModelUpload = (e) => {
     if (e.target.files && e.target.files[0]) {
-      setModelImage(URL.createObjectURL(e.target.files[0]));
+      const reader = new FileReader();
+      reader.onload = (ev) => setModelImage(ev.target.result);
+      reader.readAsDataURL(e.target.files[0]);
     }
   };
 

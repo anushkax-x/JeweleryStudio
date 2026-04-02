@@ -1,6 +1,7 @@
-const fastify = require('fastify')({ logger: true });
+const fastify = require('fastify')({ logger: true, bodyLimit: 52428800 });
 const cors = require('@fastify/cors');
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 fastify.register(cors, {
   origin: '*'
