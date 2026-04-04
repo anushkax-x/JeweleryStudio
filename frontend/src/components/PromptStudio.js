@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { auth } from '../lib/firebase';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -14,7 +15,13 @@ export default function PromptStudio({
 
   const fetchPrompts = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/prompts`);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
+      const res = await fetch(`${API_BASE_URL}/prompts`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
       const data = await res.json();
       setPrompts(data);
       if (data.length > 0 && !activePromptId) {
@@ -38,9 +45,14 @@ export default function PromptStudio({
   const handleSave = async () => {
     if (!currentPrompt.trim() || !currentTitle.trim()) return;
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
       await fetch(`${API_BASE_URL}/prompts`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}` 
+        },
         body: JSON.stringify({ 
           prompt: currentPrompt, 
           title: currentTitle,
@@ -56,8 +68,13 @@ export default function PromptStudio({
   const handleDelete = async () => {
     if (!activePromptId) return;
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
       await fetch(`${API_BASE_URL}/prompts/${activePromptId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
       });
       setActivePromptId(null);
       setCurrentTitle('');

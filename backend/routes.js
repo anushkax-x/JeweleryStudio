@@ -1,43 +1,81 @@
-const fs = require('fs');
 const path = require('path');
-
-const promptsFilePath = path.join(__dirname, 'prompts.json');
+const { admin, db } = require('./firebaseAdmin');
 
 module.exports = function (fastify) {
-  if (!fs.existsSync(promptsFilePath)) {
-    fs.writeFileSync(promptsFilePath, JSON.stringify([]));
-  }
+  
+  // Middleware to protect routes and assign request.user
+  fastify.addHook('preHandler', async (request, reply) => {
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      reply.code(401).send({ error: 'Unauthorized: Missing or invalid token' });
+      return;
+    }
+    
+    const token = authHeader.split('Bearer ')[1];
+    try {
+      const decodedToken = await admin.auth().verifyIdToken(token);
+      request.user = decodedToken;
+    } catch (err) {
+      fastify.log.error(err);
+      reply.code(401).send({ error: 'Unauthorized: Invalid token' });
+    }
+  });
 
   fastify.get('/prompts', async (request, reply) => {
-    const data = fs.readFileSync(promptsFilePath, 'utf8');
-    return JSON.parse(data || '[]');
+    try {
+      const snapshot = await db.collection('users')
+        .doc(request.user.uid)
+        .collection('prompts')
+        .get();
+        
+      const prompts = snapshot.docs.map(doc => doc.data());
+      return prompts;
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ error: 'Error fetching prompts' });
+    }
   });
 
   fastify.post('/prompts', async (request, reply) => {
-    const { prompt, title, id } = request.body;
-    let prompts = JSON.parse(fs.readFileSync(promptsFilePath, 'utf8') || '[]');
-    
-    if (id) {
-      const idx = prompts.findIndex(p => String(p.id) === String(id));
-      if (idx !== -1) {
-        prompts[idx].prompt = prompt;
-        if (title) prompts[idx].title = title;
-      }
-      else prompts.push({ id, prompt, title: title || 'Untitled' });
-    } else {
-      prompts.push({ id: Date.now().toString(), prompt, title: title || 'Untitled' });
+    try {
+      const { prompt, title, id } = request.body;
+      const promptId = id || Date.now().toString();
+      
+      const promptData = {
+        id: promptId,
+        prompt,
+        title: title || 'Untitled',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      };
+
+      await db.collection('users')
+        .doc(request.user.uid)
+        .collection('prompts')
+        .doc(promptId)
+        .set(promptData, { merge: true });
+
+      return { success: true };
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ error: 'Error saving prompt' });
     }
-    
-    fs.writeFileSync(promptsFilePath, JSON.stringify(prompts));
-    return { success: true };
   });
 
   fastify.delete('/prompts/:id', async (request, reply) => {
-    const { id } = request.params;
-    let prompts = JSON.parse(fs.readFileSync(promptsFilePath, 'utf8') || '[]');
-    prompts = prompts.filter(p => String(p.id) !== String(id));
-    fs.writeFileSync(promptsFilePath, JSON.stringify(prompts));
-    return { success: true };
+    try {
+      const { id } = request.params;
+      
+      await db.collection('users')
+        .doc(request.user.uid)
+        .collection('prompts')
+        .doc(id)
+        .delete();
+
+      return { success: true };
+    } catch (error) {
+      fastify.log.error(error);
+      reply.code(500).send({ error: 'Error deleting prompt' });
+    }
   });
 
   fastify.post('/generate-image', async (request, reply) => {
@@ -80,7 +118,6 @@ module.exports = function (fastify) {
       const result = await aiModel.generateContent(promptParts);
       const data = result.response;
       
-      // If the model generates an image inline
       if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
         const part = data.candidates[0].content.parts[0];
         if (part.inlineData) {
@@ -90,16 +127,16 @@ module.exports = function (fastify) {
           if (text.startsWith('iVBORw0K') || text.startsWith('/9j/')) {
             return { imageUrl: `data:image/jpeg;base64,${text}` };
           }
-          console.error("Gemini returned text instead of image inline_data:", text);
+          fastify.log.error("Gemini returned text instead of image inline_data:", text);
           return { imageUrl: `https://placehold.co/400x500/222/fff?text=Model+returned+text` };
         }
       }
       
-      console.error('Unexpected Gemini Response Structure');
+      fastify.log.error('Unexpected Gemini Response Structure');
       return { imageUrl: `https://placehold.co/400x500/222/fff?text=Unexpected+Format` };
       
     } catch (err) {
-      console.error('Error generating image via SDK:', err);
+      fastify.log.error('Error generating image via SDK:', err);
       return { imageUrl: `https://placehold.co/400x500/222/f00?text=Timeout+or+Error` };
     }
   });

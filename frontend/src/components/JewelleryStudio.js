@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { auth } from '../lib/firebase';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
 
@@ -28,9 +29,14 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
 
   const generateImage = async (index) => {
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) return;
       const res = await fetch(`${API_BASE_URL}/generate-image`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: currentPrompt || 'Generate photoshoot' }),
       });
       const data = await res.json();
