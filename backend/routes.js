@@ -28,7 +28,27 @@ module.exports = function (fastify) {
         .collection('prompts')
         .get();
         
-      const prompts = snapshot.docs.map(doc => doc.data());
+      let prompts = snapshot.docs.map(doc => doc.data());
+
+      // If they have no prompts, seed their database with the defaults from prompts.json
+      if (prompts.length === 0) {
+        const fs = require('fs');
+        const defaultPromptsPath = path.join(__dirname, 'prompts.json');
+        
+        if (fs.existsSync(defaultPromptsPath)) {
+          const defaultPrompts = JSON.parse(fs.readFileSync(defaultPromptsPath, 'utf8'));
+          
+          const batch = db.batch();
+          defaultPrompts.forEach(p => {
+            const docRef = db.collection('users').doc(request.user.uid).collection('prompts').doc(String(p.id));
+            batch.set(docRef, { ...p, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
+          });
+          
+          await batch.commit();
+          prompts = defaultPrompts;
+        }
+      }
+
       return prompts;
     } catch (error) {
       fastify.log.error(error);

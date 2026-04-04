@@ -23,12 +23,18 @@ export default function PromptStudio({
         }
       });
       const data = await res.json();
-      setPrompts(data);
-      if (data.length > 0 && !activePromptId) {
-        handleSelect(data[0]);
+      if (Array.isArray(data)) {
+        setPrompts(data);
+        if (data.length > 0 && !activePromptId) {
+          handleSelect(data[0]);
+        }
+      } else {
+        console.error("Backend returned non-array:", data);
+        setPrompts([]);
       }
     } catch (err) {
       console.error(err);
+      setPrompts([]);
     }
   };
 
