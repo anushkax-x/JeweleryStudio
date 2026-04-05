@@ -10,6 +10,7 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
   const [images, setImages] = useState([]);
   const [loadingStates, setLoadingStates] = useState([]);
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [availableModels, setAvailableModels] = useState(['gemini']);
 
   const handleJewelleryUpload = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -27,7 +28,7 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
     }
   };
 
-  const generateImage = async (index) => {
+  const generateImage = async (index, modelName) => {
     try {
       const token = await auth.currentUser?.getIdToken();
       if (!token) return;
@@ -37,7 +38,7 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: currentPrompt || 'Generate photoshoot' }),
+        body: JSON.stringify({ jewelleryImage, modelImage, type, prompt: currentPrompt || 'Generate photoshoot', model: modelName }),
       });
       const data = await res.json();
       
@@ -59,10 +60,17 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
 
   const handleGenerate = () => {
     const numToGenerate = Math.max(1, (modelCentric || 0) + (enhancedProduct || 0));
-    setImages(Array(numToGenerate).fill(null));
-    setLoadingStates(Array(numToGenerate).fill(true));
-    for (let i = 0; i < numToGenerate; i++) {
-        generateImage(i);
+    const totalToGenerate = numToGenerate * availableModels.length;
+
+    setImages(Array(totalToGenerate).fill(null));
+    setLoadingStates(Array(totalToGenerate).fill(true));
+    
+    let globalIndex = 0;
+    for (const modelName of availableModels) {
+      for (let i = 0; i < numToGenerate; i++) {
+          generateImage(globalIndex, modelName);
+          globalIndex++;
+      }
     }
   };
 
@@ -70,6 +78,18 @@ export default function JewelleryStudio({ currentPrompt, modelCentric, enhancedP
   
   React.useEffect(() => {
     setMounted(true);
+    const fetchModels = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/available-models`);
+        const data = await res.json();
+        if (data && data.models && data.models.length > 0) {
+          setAvailableModels(data.models);
+        }
+      } catch (err) {
+        console.error('Failed to fetch available models:', err);
+      }
+    };
+    fetchModels();
   }, []);
 
   const canGenerate = mounted && Boolean(jewelleryImage) && !loadingStates.some(l => l);

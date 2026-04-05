@@ -98,62 +98,114 @@ module.exports = function (fastify) {
     }
   });
 
+  fastify.get('/available-models', async (request, reply) => {
+    const models = [];
+    if (process.env.GEMINI_API_KEY) models.push('gemini');
+    if (process.env.OPENAI_API_KEY) models.push('openai');
+    if (process.env.REPLICATE_API_TOKEN) models.push('replicate');
+    if (process.env.STABILITY_API_KEY) models.push('stability');
+    
+    // If no keys are present, return an empty array
+    return { models };
+  });
+
   fastify.post('/generate-image', async (request, reply) => {
     try {
-      const { jewelleryImage, modelImage, prompt, type } = request.body;
-      const key = process.env.GEMINI_API_KEY;
-      const modelName = process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview';
-
-      if (!key) {
-        return { imageUrl: 'https://placehold.co/400x500/222/f00?text=Missing+API+Key' };
-      }
-
-      const { GoogleGenerativeAI } = require('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(key);
-      const aiModel = genAI.getGenerativeModel({ model: modelName });
-
+      const { jewelleryImage, modelImage, prompt, type, model } = request.body;
       const fullPrompt = `${prompt} Focus on high-end lifestyle editorial quality. Jewellery type: ${type||'product'}`;
-      const promptParts = [fullPrompt];
-
-      if (jewelleryImage) {
-        const split = jewelleryImage.split(',');
-        if (split.length === 2) {
-          const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-          promptParts.push({
-            inlineData: { mimeType: mimeType, data: split[1] }
-          });
-        }
-      }
-
-      if (modelImage) {
-        const split = modelImage.split(',');
-        if (split.length === 2) {
-          const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-          promptParts.push({
-            inlineData: { mimeType: mimeType, data: split[1] }
-          });
-        }
-      }
-
-      const result = await aiModel.generateContent(promptParts);
-      const data = result.response;
       
-      if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-        const part = data.candidates[0].content.parts[0];
-        if (part.inlineData) {
-          return { imageUrl: `data:${part.inlineData.mime_type || part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}` };
-        } else if (part.text) {
-          const text = part.text.trim();
-          if (text.startsWith('iVBORw0K') || text.startsWith('/9j/')) {
-            return { imageUrl: `data:image/jpeg;base64,${text}` };
+      let imageUrl = null;
+
+      if (model === 'openai' && process.env.OPENAI_API_KEY) {
+        const { OpenAI } = require('openai');
+        const openai = new OpenAI();
+        const response = await openai.images.generate({
+          model: "dall-e-3",
+          prompt: fullPrompt,
+          n: 1,
+          size: "1024x1024",
+        });
+        imageUrl = response.data[0].url;
+      } 
+      else if (model === 'replicate' && process.env.REPLICATE_API_TOKEN) {
+        const Replicate = require('replicate');
+        const replicate = new Replicate();
+        
+        let input = { prompt: fullPrompt };
+        
+        const output = await replicate.run(
+          "black-forest-labs/flux-1.1-pro",
+          { input }
+        );
+        imageUrl = Array.isArray(output) ? output[0] : output;
+      } 
+      else if (model === 'stability' && process.env.STABILITY_API_KEY) {
+        const formData = new FormData();
+        formData.append('prompt', fullPrompt);
+        formData.append('output_format', 'jpeg');
+        
+        const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${process.env.STABILITY_API_KEY}`,
+            'Accept': 'image/*'
+          },
+          body: formData
+        });
+
+        if (res.ok) {
+          const buffer = await res.arrayBuffer();
+          const base64 = Buffer.from(buffer).toString('base64');
+          imageUrl = `data:image/jpeg;base64,${base64}`;
+        } else {
+          fastify.log.error('Stability API error:', await res.text());
+          throw new Error('Stability Error');
+        }
+      } 
+      else if (model === 'gemini' && process.env.GEMINI_API_KEY) {
+        const { GoogleGenerativeAI } = require('@google/generative-ai');
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const aiModel = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview' });
+
+        const promptParts = [fullPrompt];
+
+        if (jewelleryImage) {
+          const split = jewelleryImage.split(',');
+          if (split.length === 2) {
+            const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+            promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
           }
-          fastify.log.error("Gemini returned text instead of image inline_data:", text);
-          return { imageUrl: `https://placehold.co/400x500/222/fff?text=Model+returned+text` };
+        }
+
+        if (modelImage) {
+          const split = modelImage.split(',');
+          if (split.length === 2) {
+            const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+            promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
+          }
+        }
+
+        const result = await aiModel.generateContent(promptParts);
+        const data = result.response;
+        
+        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
+          const part = data.candidates[0].content.parts[0];
+          if (part.inlineData) {
+            imageUrl = `data:${part.inlineData.mime_type || part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`;
+          } else if (part.text) {
+            const text = part.text.trim();
+            if (text.startsWith('iVBORw0K') || text.startsWith('/9j/')) {
+              imageUrl = `data:image/jpeg;base64,${text}`;
+            }
+          }
         }
       }
-      
-      fastify.log.error('Unexpected Gemini Response Structure');
-      return { imageUrl: `https://placehold.co/400x500/222/fff?text=Unexpected+Format` };
+
+      if (imageUrl) {
+        return { imageUrl };
+      } else {
+        return { imageUrl: `https://placehold.co/400x500/222/f00?text=Model+Not+Configured+Or+Failed` };
+      }
       
     } catch (err) {
       fastify.log.error('Error generating image via SDK:', err);
