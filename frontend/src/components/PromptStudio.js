@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { auth } from '../lib/firebase';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = '/api';
 
 export default function PromptStudio({ 
   currentPrompt, setCurrentPrompt,
@@ -15,13 +14,7 @@ export default function PromptStudio({
 
   const fetchPrompts = async () => {
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
-      const res = await fetch(`${API_BASE_URL}/prompts`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
+      const res = await fetch(`${API_BASE_URL}/prompts`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setPrompts(data);
@@ -51,13 +44,10 @@ export default function PromptStudio({
   const handleSave = async () => {
     if (!currentPrompt.trim() || !currentTitle.trim()) return;
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
       await fetch(`${API_BASE_URL}/prompts`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}` 
         },
         body: JSON.stringify({ 
           prompt: currentPrompt, 
@@ -74,13 +64,8 @@ export default function PromptStudio({
   const handleDelete = async () => {
     if (!activePromptId) return;
     try {
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) return;
       await fetch(`${API_BASE_URL}/prompts/${activePromptId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
       });
       setActivePromptId(null);
       setCurrentTitle('');
@@ -149,7 +134,7 @@ export default function PromptStudio({
                 className="minimal-select w-full bg-transparent border-b border-border-color text-white text-[0.95rem] py-1 focus:outline-none focus:border-brand"
                 value={activePromptId || ''}
                 onChange={(e) => {
-                  const p = prompts.find(pr => pr.id === e.target.value);
+                  const p = prompts.find(pr => String(pr.id) === e.target.value);
                   if (p) handleSelect(p);
                 }}
               >
@@ -204,7 +189,7 @@ export default function PromptStudio({
               {prompts.map((p) => (
                 <button 
                   key={p.id} 
-                  className={`px-5 py-2 rounded-full text-[0.85rem] cursor-pointer transition-all duration-200 ${activePromptId === p.id ? 'bg-brand text-white border border-brand' : 'bg-white/5 border border-white/10 text-text-secondary hover:bg-white/10 hover:text-white'}`}
+                  className={`px-5 py-2 rounded-full text-[0.85rem] cursor-pointer transition-all duration-200 ${String(activePromptId) === String(p.id) ? 'bg-brand text-white border border-brand' : 'bg-white/5 border border-white/10 text-text-secondary hover:bg-white/10 hover:text-white'}`}
                   onClick={() => handleSelect(p)}
                 >
                   {p.title || 'Untitled'}

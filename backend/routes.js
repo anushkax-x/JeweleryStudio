@@ -1,55 +1,25 @@
+const fs = require('fs');
 const path = require('path');
-const { admin, db } = require('./firebaseAdmin');
+
+const PROMPTS_PATH = path.join(__dirname, 'prompts.json');
+
+function loadPrompts() {
+  const raw = fs.readFileSync(PROMPTS_PATH, 'utf8');
+  const arr = JSON.parse(raw);
+  return arr.map((p) => ({
+    ...p,
+    id: String(p.id),
+  }));
+}
+
+function savePrompts(prompts) {
+  fs.writeFileSync(PROMPTS_PATH, JSON.stringify(prompts, null, 2), 'utf8');
+}
 
 module.exports = function (fastify) {
-  
-  // Middleware to protect routes and assign request.user
-  fastify.addHook('preHandler', async (request, reply) => {
-    const authHeader = request.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      reply.code(401).send({ error: 'Unauthorized: Missing or invalid token' });
-      return;
-    }
-    
-    const token = authHeader.split('Bearer ')[1];
-    try {
-      const decodedToken = await admin.auth().verifyIdToken(token);
-      request.user = decodedToken;
-    } catch (err) {
-      fastify.log.error(err);
-      reply.code(401).send({ error: 'Unauthorized: Invalid token' });
-    }
-  });
-
   fastify.get('/prompts', async (request, reply) => {
     try {
-      const snapshot = await db.collection('users')
-        .doc(request.user.uid)
-        .collection('prompts')
-        .get();
-        
-      let prompts = snapshot.docs.map(doc => doc.data());
-
-      // If they have no prompts, seed their database with the defaults from prompts.json
-      if (prompts.length === 0) {
-        const fs = require('fs');
-        const defaultPromptsPath = path.join(__dirname, 'prompts.json');
-        
-        if (fs.existsSync(defaultPromptsPath)) {
-          const defaultPrompts = JSON.parse(fs.readFileSync(defaultPromptsPath, 'utf8'));
-          
-          const batch = db.batch();
-          defaultPrompts.forEach(p => {
-            const docRef = db.collection('users').doc(request.user.uid).collection('prompts').doc(String(p.id));
-            batch.set(docRef, { ...p, updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-          });
-          
-          await batch.commit();
-          prompts = defaultPrompts;
-        }
-      }
-
-      return prompts;
+      return loadPrompts();
     } catch (error) {
       fastify.log.error(error);
       reply.code(500).send({ error: 'Error fetching prompts' });
@@ -59,21 +29,20 @@ module.exports = function (fastify) {
   fastify.post('/prompts', async (request, reply) => {
     try {
       const { prompt, title, id } = request.body;
-      const promptId = id || Date.now().toString();
-      
+      const prompts = loadPrompts();
+      const promptId = id != null && id !== '' ? String(id) : String(Date.now());
+      const idx = prompts.findIndex((p) => String(p.id) === promptId);
       const promptData = {
         id: promptId,
         prompt,
         title: title || 'Untitled',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       };
-
-      await db.collection('users')
-        .doc(request.user.uid)
-        .collection('prompts')
-        .doc(promptId)
-        .set(promptData, { merge: true });
-
+      if (idx >= 0) {
+        prompts[idx] = { ...prompts[idx], ...promptData };
+      } else {
+        prompts.push(promptData);
+      }
+      savePrompts(prompts);
       return { success: true };
     } catch (error) {
       fastify.log.error(error);
@@ -84,13 +53,8 @@ module.exports = function (fastify) {
   fastify.delete('/prompts/:id', async (request, reply) => {
     try {
       const { id } = request.params;
-      
-      await db.collection('users')
-        .doc(request.user.uid)
-        .collection('prompts')
-        .doc(id)
-        .delete();
-
+      const filtered = loadPrompts().filter((p) => String(p.id) !== String(id));
+      savePrompts(filtered);
       return { success: true };
     } catch (error) {
       fastify.log.error(error);
@@ -104,53 +68,112 @@ module.exports = function (fastify) {
     if (process.env.OPENAI_API_KEY) models.push('openai');
     if (process.env.REPLICATE_API_TOKEN) models.push('replicate');
     if (process.env.STABILITY_API_KEY) models.push('stability');
-    
-    // If no keys are present, return an empty array
+
     return { models };
   });
 
   fastify.post('/generate-image', async (request, reply) => {
     try {
-      const { jewelleryImage, modelImage, prompt, type, model } = request.body;
-      const fullPrompt = `${prompt} Focus on high-end lifestyle editorial quality. Jewellery type: ${type||'product'}`;
-      
+      const {
+        jewelleryImage,
+        modelImage,
+        prompt,
+        type,
+        model,
+        shotMode,
+        productFocus,
+        modelVariation,
+        clientSlotIndex,
+        clientRunId,
+      } = request.body;
+
+      const baseRaw = (prompt || 'Luxury jewellery').trim();
+      const piece = type || 'jewellery';
+
+      /** Strip words that make product shots drift toward worn/editorial imagery. */
+      function sanitizeProductStyleNotes(text) {
+        return text
+          .replace(
+            /\b(model|models|woman|women|girl|lady|face|portrait|wearing|wear|worn|editorial|lifestyle|runway|saree|sari|skin|modeling|split|diptych|collage|logo|brand|watermark|text)\b/gi,
+            ' '
+          )
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 400);
+      }
+
+      /** User prompts often mention "catalogue / white / product" — that triggers split before/after layouts in image models. */
+      function sanitizeModelStyleNotes(text) {
+        return text
+          .replace(
+            /\b(packshot|pack shot|flat lay|flatlay|white background|pure white|#fff|#ffffff|e-?commerce|product shot|product photo|catalogue|catalog|grid|split|split-?screen|diptych|triptych|before and after|comparison|inset|PIP|picture-?in-?picture|magazine|layout|banner|duo|dual panel)\b/gi,
+            ' '
+          )
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 400);
+      }
+
+      const antiSplit =
+        ' FORBIDDEN LAYOUTS (must never appear): split-screen, top/bottom split, left/right split, diptych, triptych, collage, magazine spread, before/after, comparison, story layout, or any second photo embedded in the frame. FORBIDDEN: picture-in-picture, inset thumbnail, floating secondary image, side-by-side panels.';
+
+      const noCollage = ` Output must be exactly ONE single continuous photograph filling the entire frame.${antiSplit} Do not create grids, contact sheets, or multiple scenes in one image.`;
+
+      const modelShotExtra =
+        ` SINGLE SCENE ONLY: one editorial photograph of a real woman wearing the jewellery.${noCollage} The reference jewellery image must NEVER be pasted, tiled, or shown as a separate studio/white-background panel inside this output — only recreate the jewellery on the model in one unified shot. Framing is STRICTLY chin-down: crop at or below the lower lip/chin — zero eyes, eyebrows, forehead, nose bridge, or full face. Show only neck, throat, décolleté, shoulders, collarbone, ears. If a face reference is provided, use only for tone; still no visible face above the chin. Shallow depth of field; jewellery is the hero.`;
+
+      const productShotExtra =
+        `TASK: ONE studio PRODUCT PHOTO only.${noCollage} Full-frame #ffffff background; soft contact shadow; unworn jewellery only (flat or suspended). ZERO humans, ZERO skin, ZERO fabric, ZERO room, ZERO outdoor scene.${antiSplit} ZERO logos, ZERO brand names, ZERO text, ZERO watermarks. Macro sharp.`;
+
+      let fullPrompt;
+      if (shotMode === 'product') {
+        const focus = (productFocus || 'Reproduce the uploaded jewellery accurately.').trim();
+        const style = sanitizeProductStyleNotes(baseRaw) || 'clean luxury finish';
+        fullPrompt = `${productShotExtra}
+
+CRITICAL: The reference may show a person or mixed layout — IGNORE that. Use the reference ONLY to copy the jewellery design, stones, and metal. Output must be a single packshot on pure white — not a composite, not a split, not worn.
+
+Subject: ${focus}
+Jewellery type context: ${piece}.
+Lighting / mood (packshot only): ${style}`;
+      } else {
+        const variation = (modelVariation || 'Chin-down crop; jewellery dominant.').trim();
+        const modelStyle = sanitizeModelStyleNotes(baseRaw) || baseRaw;
+        fullPrompt = `${modelStyle} ${modelShotExtra} Angle / pose: ${variation}`;
+      }
+
       let imageUrl = null;
 
       if (model === 'openai' && process.env.OPENAI_API_KEY) {
         const { OpenAI } = require('openai');
         const openai = new OpenAI();
         const response = await openai.images.generate({
-          model: "dall-e-3",
+          model: 'dall-e-3',
           prompt: fullPrompt,
           n: 1,
-          size: "1024x1024",
+          size: '1024x1024',
         });
         imageUrl = response.data[0].url;
-      } 
-      else if (model === 'replicate' && process.env.REPLICATE_API_TOKEN) {
+      } else if (model === 'replicate' && process.env.REPLICATE_API_TOKEN) {
         const Replicate = require('replicate');
         const replicate = new Replicate();
-        
-        let input = { prompt: fullPrompt };
-        
-        const output = await replicate.run(
-          "black-forest-labs/flux-1.1-pro",
-          { input }
-        );
+
+        const input = { prompt: fullPrompt };
+
+        const output = await replicate.run('black-forest-labs/flux-1.1-pro', { input });
         imageUrl = Array.isArray(output) ? output[0] : output;
-      } 
-      else if (model === 'stability' && process.env.STABILITY_API_KEY) {
+      } else if (model === 'stability' && process.env.STABILITY_API_KEY) {
         const formData = new FormData();
         formData.append('prompt', fullPrompt);
         formData.append('output_format', 'jpeg');
-        
-        const res = await fetch("https://api.stability.ai/v2beta/stable-image/generate/core", {
+
+        const res = await fetch('https://api.stability.ai/v2beta/stable-image/generate/core', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${process.env.STABILITY_API_KEY}`,
-            'Accept': 'image/*'
+            Authorization: `Bearer ${process.env.STABILITY_API_KEY}`,
+            Accept: 'image/*',
           },
-          body: formData
+          body: formData,
         });
 
         if (res.ok) {
@@ -161,55 +184,107 @@ module.exports = function (fastify) {
           fastify.log.error('Stability API error:', await res.text());
           throw new Error('Stability Error');
         }
-      } 
-      else if (model === 'gemini' && process.env.GEMINI_API_KEY) {
+      } else if (model === 'gemini' && process.env.GEMINI_API_KEY) {
         const { GoogleGenerativeAI } = require('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const aiModel = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview' });
+        const geminiSystem = [
+          'You generate exactly ONE photograph per request.',
+          'Never output split-screen, diptychs, collages, magazine layouts, before/after, or picture-in-picture.',
+          'Never embed a second photograph or inset inside the frame.',
+          'If reference images are provided, use them only for design continuity — do not paste them as separate panels.',
+        ].join(' ');
+        const aiModel = genAI.getGenerativeModel({
+          model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview',
+          systemInstruction: geminiSystem,
+        });
 
-        const promptParts = [fullPrompt];
-
-        if (jewelleryImage) {
+        let promptParts;
+        if (shotMode === 'product' && jewelleryImage) {
           const split = jewelleryImage.split(',');
+          const refLabel =
+            'REFERENCE (design extraction only): The next image may show a person, split layout, or mixed scene — IGNORE all of that. Copy only the jewellery design, then output ONE unworn full-frame packshot on pure #ffffff. No humans, no split, no logo, no text.';
           if (split.length === 2) {
-            const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-            promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
+            const mimeType =
+              split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+            promptParts = [fullPrompt, refLabel, { inlineData: { mimeType: mimeType, data: split[1] } }];
+          } else {
+            promptParts = [fullPrompt];
+          }
+        } else {
+          promptParts = [fullPrompt];
+          if (jewelleryImage) {
+            const split = jewelleryImage.split(',');
+            if (split.length === 2) {
+              const mimeType =
+                split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+              const modelJewelleryRef =
+                'REFERENCE (design only — NOT an output panel): The next image may be a packshot on white or a worn shot. Do NOT composite it as a second tile, inset, or split. Generate ONE new chin-down photo of a model wearing this exact jewellery; the reference must not appear as a separate picture inside the result.';
+              promptParts.push(modelJewelleryRef);
+              promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
+            }
           }
         }
 
-        if (modelImage) {
+        const useModelRef = shotMode !== 'product' && modelImage;
+        if (useModelRef) {
           const split = modelImage.split(',');
           if (split.length === 2) {
-            const mimeType = split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+            const mimeType =
+              split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
             promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
           }
         }
 
         const result = await aiModel.generateContent(promptParts);
         const data = result.response;
-        
-        if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts[0]) {
-          const part = data.candidates[0].content.parts[0];
-          if (part.inlineData) {
-            imageUrl = `data:${part.inlineData.mime_type || part.inlineData.mimeType || 'image/jpeg'};base64,${part.inlineData.data}`;
-          } else if (part.text) {
-            const text = part.text.trim();
+
+        const firstPart =
+          data.candidates &&
+          data.candidates[0] &&
+          data.candidates[0].content &&
+          data.candidates[0].content.parts &&
+          data.candidates[0].content.parts[0];
+
+        if (firstPart) {
+          if (firstPart.inlineData) {
+            imageUrl = `data:${firstPart.inlineData.mime_type || firstPart.inlineData.mimeType || 'image/jpeg'};base64,${firstPart.inlineData.data}`;
+          } else if (firstPart.text) {
+            const text = firstPart.text.trim();
             if (text.startsWith('iVBORw0K') || text.startsWith('/9j/')) {
               imageUrl = `data:image/jpeg;base64,${text}`;
             }
           }
         }
+        if (!imageUrl && data.candidates && data.candidates[0]) {
+          fastify.log.warn(
+            'Gemini returned no image; finishReason=%s',
+            data.candidates[0].finishReason || 'unknown'
+          );
+        }
       }
 
+      const meta =
+        clientSlotIndex !== undefined && clientSlotIndex !== null
+          ? { clientSlotIndex, clientRunId }
+          : {};
+
       if (imageUrl) {
-        return { imageUrl };
+        return { imageUrl, ...meta };
       } else {
-        return { imageUrl: `https://placehold.co/400x500/222/f00?text=Model+Not+Configured+Or+Failed` };
+        return {
+          imageUrl: `https://placehold.co/400x500/222/f00?text=Model+Not+Configured+Or+Failed`,
+          ...meta,
+        };
       }
-      
     } catch (err) {
       fastify.log.error('Error generating image via SDK:', err);
-      return { imageUrl: `https://placehold.co/400x500/222/f00?text=Timeout+or+Error` };
+      const { clientSlotIndex, clientRunId } = request.body || {};
+      return {
+        imageUrl: `https://placehold.co/400x500/222/f00?text=Timeout+or+Error`,
+        ...(clientSlotIndex !== undefined && clientSlotIndex !== null
+          ? { clientSlotIndex, clientRunId }
+          : {}),
+      };
     }
   });
 };
