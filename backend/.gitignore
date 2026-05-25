@@ -1,7 +1,0 @@
-# dependencies
-/node_modules
-.env
-
-# Firebase service account keys
-*-firebase-adminsdk-uid-*.json
-anoree-studio-firebase-adminsdk-fbsvc-bba1ac1796.json
