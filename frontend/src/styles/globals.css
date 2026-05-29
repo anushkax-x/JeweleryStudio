@@ -2,12 +2,27 @@
 @config "../../tailwind.config.js";
 
 @layer base {
+  :root {
+    --font-sans: "DM Sans", system-ui, sans-serif;
+    --font-display: "Cormorant Garamond", Georgia, serif;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
-    background-color: #121417;
-    color: #ffffff;
+    background-color: #f5f3ef;
+    color: #141310;
     min-height: 100vh;
     overflow-x: hidden;
-    font-family: ui-sans-serif, system-ui, sans-serif;
+    font-family: var(--font-sans);
+  }
+
+  ::selection {
+    background: rgba(154, 123, 79, 0.2);
+    color: #141310;
   }
 }
 
@@ -15,9 +30,37 @@
   .minimal-select {
     appearance: none;
     cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%237a8294%22%2F%3E%3C%2Fsvg%3E");
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%236f6a63%22%2F%3E%3C%2Fsvg%3E");
     background-repeat: no-repeat;
-    background-position: right center;
+    background-position: right 0.25rem center;
+    padding-right: 1.25rem;
+  }
+
+  .field-input {
+    width: 100%;
+    border-radius: 0.75rem;
+    border: 1px solid #e6e1d9;
+    background-color: #ffffff;
+    padding: 0.75rem 1rem;
+    font-size: 0.9rem;
+    color: #141310;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+
+  .field-input::placeholder {
+    color: #9c958c;
+  }
+
+  .field-input:focus {
+    border-color: #9a7b4f;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(154, 123, 79, 0.12);
+  }
+
+  .field-textarea {
+    resize: vertical;
+    line-height: 1.6;
+    min-height: 88px;
   }
 }
 
