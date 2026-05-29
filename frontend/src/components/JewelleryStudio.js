@@ -1,7 +1,61 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import { buildGenerationJobs } from '../lib/photoGenerationPlan';
+import { compressImageFile } from '../lib/compressImage';
 
 const API_BASE_URL = '/api';
+const PARALLEL_SLOTS = 2;
+
+function formatElapsed(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
+function GenerationLoader({ completed, total, label, startedAt }) {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    const start = startedAt || Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - start) / 1000));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [startedAt]);
+
+  const safeTotal = Math.max(1, total);
+  const pct = Math.round((completed / safeTotal) * 100);
+
+  return (
+    <div className="mb-6" role="status" aria-live="polite" aria-busy="true">
+      <div className="flex justify-between items-baseline gap-3 mb-2 text-[0.8rem] text-text-secondary">
+        <span className="text-text-primary truncate">
+          {completed} / {total}
+          {label ? ` · ${label}` : ''}
+        </span>
+        <span className="shrink-0 tabular-nums">{formatElapsed(elapsed)}</span>
+      </div>
+      <div className="h-1 bg-[#2d313a] rounded-full overflow-hidden">
+        <div
+          className="h-full bg-brand rounded-full transition-[width] duration-300 ease-out"
+          style={{ width: `${Math.max(pct, completed > 0 ? 4 : 2)}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+async function runPool(items, concurrency, worker) {
+  let nextIndex = 0;
+  const runners = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (nextIndex < items.length) {
+      const i = nextIndex;
+      nextIndex += 1;
+      await worker(items[i], i);
+    }
+  });
+  await Promise.all(runners);
+}
 
 export default function JewelleryStudio({
   masterPrompt,
@@ -10,7 +64,6 @@ export default function JewelleryStudio({
   modelCount = 0,
   productCount = 0,
 }) {
-  /** Increments each Generate click so late responses from an older run cannot write into the grid. */
   const generationRunRef = useRef(0);
   const [jewelleryImage, setJewelleryImage] = useState(null);
   const [modelImage, setModelImage] = useState(null);
@@ -20,25 +73,23 @@ export default function JewelleryStudio({
   const [slotLabels, setSlotLabels] = useState([]);
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [availableModels, setAvailableModels] = useState(['gemini']);
-  const [genProgress, setGenProgress] = useState(null);
+  const [generationProgress, setGenerationProgress] = useState(null);
 
-  const handleJewelleryUpload = (e) => {
-    if (e.target.files && e.target.files[0]) {
+  const handleImageUpload = async (e, setter) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const compressed = await compressImageFile(file);
+      setter(compressed);
+    } catch (err) {
+      console.error('Image compress failed, using original:', err);
       const reader = new FileReader();
-      reader.onload = (ev) => setJewelleryImage(ev.target.result);
-      reader.readAsDataURL(e.target.files[0]);
+      reader.onload = (ev) => setter(ev.target.result);
+      reader.readAsDataURL(file);
     }
   };
 
-  const handleModelUpload = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const reader = new FileReader();
-      reader.onload = (ev) => setModelImage(ev.target.result);
-      reader.readAsDataURL(e.target.files[0]);
-    }
-  };
-
-  const generateImage = async (index, modelName, job, runId) => {
+  const generateImage = async (index, modelName, job, runId, onComplete) => {
     const isProduct = job.shotMode === 'product';
     const body = {
       jewelleryImage,
@@ -73,11 +124,7 @@ export default function JewelleryStudio({
     };
 
     try {
-      let data = await runOnce();
-      if (data.imageUrl && String(data.imageUrl).includes('placehold.co')) {
-        await new Promise((r) => setTimeout(r, 900));
-        data = await runOnce();
-      }
+      const data = await runOnce();
       if (generationRunRef.current !== runId) {
         return;
       }
@@ -101,6 +148,7 @@ export default function JewelleryStudio({
         next[index] = false;
         return next;
       });
+      onComplete?.(index, job);
     }
   };
 
@@ -108,43 +156,75 @@ export default function JewelleryStudio({
 
   const handleGenerate = () => {
     const jobs = buildGenerationJobs(type, { modelCount, productCount });
+    if (jobs.length === 0) return;
+
     const provider = availableModels[0] || 'gemini';
     const runId = ++generationRunRef.current;
+    const startedAt = Date.now();
+    let completedCount = 0;
 
-    setSlotLabels(jobs.map((j) => j.label));
-    setImages(Array(jobs.length).fill(null));
-    setLoadingStates(Array(jobs.length).fill(true));
-    setGenProgress({ current: 0, total: jobs.length, label: jobs[0]?.label || '' });
+    const updateProgress = (label) => {
+      flushSync(() => {
+        setGenerationProgress({
+          completed: completedCount,
+          total: jobs.length,
+          label,
+          startedAt,
+        });
+      });
+    };
 
-    // One image at a time — Gemini can take 1–2+ minutes per call.
+    flushSync(() => {
+      setSlotLabels(jobs.map((j) => j.label));
+      setImages(Array(jobs.length).fill(null));
+      setLoadingStates(Array(jobs.length).fill(true));
+      setGenerationProgress({
+        completed: 0,
+        total: jobs.length,
+        label: jobs[0].label,
+        startedAt,
+      });
+    });
+
+    const jobItems = jobs.map((job, index) => ({ job, index }));
+
     (async () => {
-      for (let index = 0; index < jobs.length; index += 1) {
+      await runPool(jobItems, PARALLEL_SLOTS, async ({ job, index }) => {
         if (generationRunRef.current !== runId) {
-          setGenProgress(null);
           return;
         }
-        setGenProgress({
-          current: index + 1,
-          total: jobs.length,
-          label: jobs[index].label,
+        updateProgress(job.label);
+        await generateImage(index, provider, job, runId, () => {
+          if (generationRunRef.current !== runId) return;
+          completedCount += 1;
+          const nextJob = jobs[completedCount];
+          updateProgress(nextJob?.label || job.label);
         });
-        await generateImage(index, provider, jobs[index], runId);
-      }
+      });
+
       if (generationRunRef.current === runId) {
-        setGenProgress(null);
+        flushSync(() => {
+          setGenerationProgress({
+            completed: jobs.length,
+            total: jobs.length,
+            label: '',
+            startedAt,
+          });
+        });
+        setTimeout(() => setGenerationProgress(null), 1200);
       }
     })();
   };
 
   const [mounted, setMounted] = useState(false);
-  
+
   React.useEffect(() => {
     setMounted(true);
     const fetchModels = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/available-models`);
         const data = await res.json();
-        if (data && data.models && data.models.length > 0) {
+        if (data?.models?.length > 0) {
           setAvailableModels(data.models);
         }
       } catch (err) {
@@ -154,8 +234,11 @@ export default function JewelleryStudio({
     fetchModels();
   }, []);
 
+  const isGenerating = loadingStates.some((l) => l);
   const canGenerate =
-    mounted && Boolean(jewelleryImage) && !loadingStates.some((l) => l) && totalPics > 0;
+    mounted && Boolean(jewelleryImage) && !isGenerating && totalPics > 0;
+  const showLoader = isGenerating || generationProgress != null;
+  const showResults = loadingStates.some((l) => l) || images.some((img) => img);
 
   const modelIndices = Array.from({ length: Math.max(0, modelCount) }, (_, i) => i);
   const productIndices = Array.from(
@@ -201,7 +284,8 @@ export default function JewelleryStudio({
     );
   };
 
-  const svgArrow = "data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%23a0a6b5%22%2F%3E%3C%2Fsvg%3E";
+  const svgArrow =
+    "data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%23a0a6b5%22%2F%3E%3C%2Fsvg%3E";
 
   return (
     <div className="flex flex-col gap-6">
@@ -210,7 +294,12 @@ export default function JewelleryStudio({
         <div className="flex items-center gap-3">
           <label className="bg-transparent text-text-primary border border-brand rounded-full px-4 py-2 text-[0.85rem] cursor-pointer transition hover:bg-[#709af01a] relative overflow-hidden">
             Add jewellery pictures
-            <input type="file" accept="image/*" onChange={handleJewelleryUpload} className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e, setJewelleryImage)}
+              className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
+            />
           </label>
           {jewelleryImage ? (
             <img src={jewelleryImage} alt="Jewellery preview" className="w-8 h-8 rounded object-cover border border-border-color" />
@@ -222,11 +311,18 @@ export default function JewelleryStudio({
 
       <div className="bg-bg-box rounded-[10px] p-6 border border-border-color">
         <h2 className="text-[1.1rem] text-text-primary mb-1 font-semibold">Model face references (optional)</h2>
-        <p className="text-text-secondary text-[0.85rem] mb-4">Add one or more face/context images for female model shots. Product shots ignore these images.</p>
+        <p className="text-text-secondary text-[0.85rem] mb-4">
+          Add one or more face/context images for female model shots. Product shots ignore these images.
+        </p>
         <div className="flex items-center gap-3">
           <label className="bg-transparent text-text-primary border border-brand rounded-full px-4 py-2 text-[0.85rem] cursor-pointer transition hover:bg-[#709af01a] relative overflow-hidden">
             Add face / context images
-            <input type="file" accept="image/*" onChange={handleModelUpload} className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" />
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => handleImageUpload(e, setModelImage)}
+              className="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer"
+            />
           </label>
           {modelImage ? (
             <img src={modelImage} alt="Model preview" className="w-8 h-8 rounded object-cover border border-border-color" />
@@ -238,11 +334,11 @@ export default function JewelleryStudio({
 
       <div className="bg-bg-box rounded-[10px] p-6 border border-border-color">
         <h2 className="text-[1.1rem] text-text-primary mb-2 font-semibold">Jewellery type</h2>
-        <select 
-          className="w-full px-4 py-3 bg-bg-dark border border-border-color text-text-primary rounded-[10px] text-[0.9rem] appearance-none bg-no-repeat bg-[right_1rem_center]" 
+        <select
+          className="w-full px-4 py-3 bg-bg-dark border border-border-color text-text-primary rounded-[10px] text-[0.9rem] appearance-none bg-no-repeat bg-[right_1rem_center]"
           style={{ backgroundImage: `url('${svgArrow}')` }}
-          value={type} 
-          onChange={e => setType(e.target.value)}
+          value={type}
+          onChange={(e) => setType(e.target.value)}
         >
           <option value="">Select type...</option>
           <option value="necklace">Necklace</option>
@@ -253,37 +349,15 @@ export default function JewelleryStudio({
         </select>
       </div>
 
-      <button 
-        className={`border-none rounded-full px-8 py-3 text-[0.95rem] self-start mt-2 font-medium ${canGenerate ? 'bg-brand text-white cursor-pointer hover:bg-[#8ab0ff]' : 'bg-[#3b404d] text-text-secondary cursor-not-allowed'}`} 
-        onClick={handleGenerate} 
+      <button
+        className={`border-none rounded-full px-8 py-3 text-[0.95rem] self-start mt-2 font-medium ${canGenerate ? 'bg-brand text-white cursor-pointer hover:bg-[#8ab0ff]' : 'bg-[#3b404d] text-text-secondary cursor-not-allowed'}`}
+        onClick={handleGenerate}
         disabled={!canGenerate}
       >
-        {loadingStates.some((l) => l)
+        {isGenerating
           ? `Generating ${totalPics} image${totalPics === 1 ? '' : 's'}…`
           : `Generate ${totalPics} pic${totalPics === 1 ? '' : 's'}`}
       </button>
-
-      {genProgress && genProgress.total > 0 && (
-        <div className="mt-4 p-4 bg-bg-box border border-border-color rounded-[10px]" role="status" aria-live="polite">
-          <div className="flex justify-between items-center gap-4 mb-2">
-            <span className="text-[0.85rem] text-text-primary font-medium">
-              Image {genProgress.current} of {genProgress.total}
-            </span>
-            <span className="text-[0.8rem] text-text-secondary truncate">{genProgress.label}</span>
-          </div>
-          <div className="h-2 bg-[#2d313a] rounded-full overflow-hidden">
-            <div
-              className="h-full bg-brand rounded-full transition-[width] duration-500 ease-out"
-              style={{
-                width: `${Math.round((genProgress.current / genProgress.total) * 100)}%`,
-              }}
-            />
-          </div>
-          <p className="text-[0.75rem] text-text-secondary mt-2">
-            Each image can take 1–2 minutes. Please keep this tab open.
-          </p>
-        </div>
-      )}
 
       {totalPics === 0 && (
         <p className="text-text-secondary text-[0.85rem] mt-1">
@@ -291,8 +365,17 @@ export default function JewelleryStudio({
         </p>
       )}
 
-      {(loadingStates.some((l) => l) || images.some((img) => img)) && (
-        <div className="mt-8 space-y-10">
+      {showResults && (
+        <div className="mt-4 space-y-10">
+          {showLoader && (
+            <GenerationLoader
+              completed={generationProgress?.completed ?? 0}
+              total={generationProgress?.total ?? totalPics}
+              label={generationProgress?.label ?? ''}
+              startedAt={generationProgress?.startedAt}
+            />
+          )}
+
           {modelCount > 0 && (
             <div>
               <h3 className="text-[0.75rem] uppercase tracking-wider text-[#7a8294] mb-3 font-medium">
@@ -322,8 +405,10 @@ export default function JewelleryStudio({
 
       {enlargedImage && (
         <div className="fixed inset-0 bg-black/85 flex items-center justify-center z-[9999]" onClick={() => setEnlargedImage(null)}>
-          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={e => e.stopPropagation()}>
-            <button className="absolute -top-10 right-0 bg-transparent border-none text-white text-3xl cursor-pointer" onClick={() => setEnlargedImage(null)}>&times;</button>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <button className="absolute -top-10 right-0 bg-transparent border-none text-white text-3xl cursor-pointer" onClick={() => setEnlargedImage(null)}>
+              &times;
+            </button>
             <img src={enlargedImage} alt="Enlarged preview" className="max-w-full max-h-[90vh] rounded-lg shadow-[0_4px_20px_rgba(0,0,0,0.5)]" />
           </div>
         </div>

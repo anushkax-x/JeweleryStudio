@@ -1,7 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_MODEL_PROMPT, DEFAULT_PRODUCT_PROMPT } from '../lib/promptDefaults';
 
 const API_BASE_URL = '/api';
+
+function applyPromptToForm(p, setters) {
+  const { setMasterPrompt, setModelPrompt, setProductPrompt } = setters;
+  setMasterPrompt(p.prompt ?? '');
+  setModelPrompt(p.modelPrompt ?? DEFAULT_MODEL_PROMPT);
+  setProductPrompt(p.productPrompt ?? DEFAULT_PRODUCT_PROMPT);
+}
 
 const textareaClass =
   'w-full resize-y leading-relaxed text-[0.85rem] border border-border-color rounded-lg p-3 bg-black/15 text-white focus:outline-none focus:border-brand';
@@ -22,15 +29,30 @@ export default function PromptStudio({
   const [currentTitle, setCurrentTitle] = useState('');
   const [activePromptId, setActivePromptId] = useState(null);
   const [isCollapsed, setIsCollapsed] = useState(true);
+  const [saveStatus, setSaveStatus] = useState('');
+  const didInitialSelect = useRef(false);
 
-  const fetchPrompts = async () => {
+  const formSetters = { setMasterPrompt, setModelPrompt, setProductPrompt };
+
+  const fetchPrompts = async (selectId) => {
     try {
       const res = await fetch(`${API_BASE_URL}/prompts`);
       const data = await res.json();
       if (Array.isArray(data)) {
         setPrompts(data);
-        if (data.length > 0 && !activePromptId) {
-          handleSelect(data[0]);
+        if (selectId) {
+          const match = data.find((pr) => String(pr.id) === String(selectId));
+          if (match) {
+            setActivePromptId(match.id);
+            setCurrentTitle(match.title || '');
+            applyPromptToForm(match, formSetters);
+          }
+        } else if (!didInitialSelect.current && data.length > 0) {
+          didInitialSelect.current = true;
+          const first = data[0];
+          setActivePromptId(first.id);
+          setCurrentTitle(first.title || '');
+          applyPromptToForm(first, formSetters);
         }
       } else {
         console.error('Backend returned non-array:', data);
@@ -49,30 +71,44 @@ export default function PromptStudio({
   const handleSelect = (p) => {
     setActivePromptId(p.id);
     setCurrentTitle(p.title || '');
-    setMasterPrompt(p.prompt || '');
-    setModelPrompt(p.modelPrompt || DEFAULT_MODEL_PROMPT);
-    setProductPrompt(p.productPrompt || DEFAULT_PRODUCT_PROMPT);
+    applyPromptToForm(p, formSetters);
+    setSaveStatus('');
   };
 
   const handleSave = async () => {
     if (!masterPrompt.trim() || !currentTitle.trim()) return;
+    setSaveStatus('');
     try {
-      await fetch(`${API_BASE_URL}/prompts`, {
+      const res = await fetch(`${API_BASE_URL}/prompts`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           prompt: masterPrompt,
-          modelPrompt,
-          productPrompt,
+          modelPrompt: modelPrompt ?? '',
+          productPrompt: productPrompt ?? '',
           title: currentTitle,
-          id: activePromptId,
+          id: activePromptId ?? undefined,
         }),
       });
-      fetchPrompts();
+      const data = await res.json();
+      if (!res.ok) {
+        setSaveStatus('Save failed');
+        return;
+      }
+      if (data.prompt) {
+        setActivePromptId(data.prompt.id);
+        setCurrentTitle(data.prompt.title || '');
+        applyPromptToForm(data.prompt, formSetters);
+        await fetchPrompts(data.prompt.id);
+      } else {
+        await fetchPrompts(activePromptId);
+      }
+      setSaveStatus('Saved — master, model & product prompts');
     } catch (err) {
       console.error(err);
+      setSaveStatus('Save failed');
     }
   };
 
@@ -228,8 +264,13 @@ export default function PromptStudio({
 
           <div className="flex gap-4 items-center mt-6 pt-4 border-t border-white/5">
             <button className="bg-[#2a2e38] text-gray-300 border border-[#3b404d] px-5 py-2 rounded-full font-medium text-[0.85rem] cursor-pointer transition-all duration-200 hover:bg-[#373c47] hover:text-white hover:border-[#4a5060] hover:-translate-y-[1px]" onClick={handleSave}>
-              Save changes
+              Save all prompts
             </button>
+            {saveStatus && (
+              <span className={`text-[0.8rem] ${saveStatus.startsWith('Saved') ? 'text-emerald-400' : 'text-red-400'}`}>
+                {saveStatus}
+              </span>
+            )}
             <button className="bg-transparent text-text-secondary border-none text-[0.85rem] cursor-pointer transition-colors duration-200 hover:text-white" onClick={handleAdd}>
               + New prompt
             </button>

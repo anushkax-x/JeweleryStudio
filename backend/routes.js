@@ -4,13 +4,26 @@ const { enqueueGeneration } = require('./generationQueue');
 
 const PROMPTS_PATH = path.join(__dirname, 'prompts.json');
 
+function normalizePrompt(p, { forSave = false } = {}) {
+  const base = {
+    ...p,
+    id: String(p.id),
+    title: p.title || 'Untitled',
+    prompt: typeof p.prompt === 'string' ? p.prompt : '',
+  };
+  if (forSave || p.modelPrompt != null) {
+    base.modelPrompt = typeof p.modelPrompt === 'string' ? p.modelPrompt : '';
+  }
+  if (forSave || p.productPrompt != null) {
+    base.productPrompt = typeof p.productPrompt === 'string' ? p.productPrompt : '';
+  }
+  return base;
+}
+
 function loadPrompts() {
   const raw = fs.readFileSync(PROMPTS_PATH, 'utf8');
   const arr = JSON.parse(raw);
-  return arr.map((p) => ({
-    ...p,
-    id: String(p.id),
-  }));
+  return arr.map(normalizePrompt);
 }
 
 function savePrompts(prompts) {
@@ -33,20 +46,23 @@ module.exports = function (fastify) {
       const prompts = loadPrompts();
       const promptId = id != null && id !== '' ? String(id) : String(Date.now());
       const idx = prompts.findIndex((p) => String(p.id) === promptId);
-      const promptData = {
-        id: promptId,
-        prompt,
-        modelPrompt: modelPrompt ?? '',
-        productPrompt: productPrompt ?? '',
-        title: title || 'Untitled',
-      };
+      const promptData = normalizePrompt(
+        {
+          id: promptId,
+          prompt: typeof prompt === 'string' ? prompt : '',
+          modelPrompt: typeof modelPrompt === 'string' ? modelPrompt : '',
+          productPrompt: typeof productPrompt === 'string' ? productPrompt : '',
+          title: title || 'Untitled',
+        },
+        { forSave: true },
+      );
       if (idx >= 0) {
-        prompts[idx] = { ...prompts[idx], ...promptData };
+        prompts[idx] = promptData;
       } else {
         prompts.push(promptData);
       }
       savePrompts(prompts);
-      return { success: true };
+      return { success: true, prompt: promptData };
     } catch (error) {
       fastify.log.error(error);
       reply.code(500).send({ error: 'Error saving prompt' });
@@ -127,16 +143,14 @@ async function handleGenerateImage(request, reply) {
           .slice(0, 400);
       }
 
-      const antiSplit =
-        ' FORBIDDEN LAYOUTS (must never appear): split-screen, top/bottom split, left/right split, diptych, triptych, collage, magazine spread, before/after, comparison, story layout, or any second photo embedded in the frame. FORBIDDEN: picture-in-picture, inset thumbnail, floating secondary image, side-by-side panels.';
-
-      const noCollage = ` Output must be exactly ONE single continuous photograph filling the entire frame.${antiSplit} Do not create grids, contact sheets, or multiple scenes in one image.`;
+      const ONE_PHOTO_RULE =
+        'ONE full-frame photograph only — no split-screen, diptych, collage, inset, or picture-in-picture.';
 
       const modelShotExtra =
-        ` SINGLE SCENE ONLY: one editorial photograph of a real woman wearing the jewellery.${noCollage} The reference jewellery image must NEVER be pasted, tiled, or shown as a separate studio/white-background panel inside this output — only recreate the jewellery on the model in one unified shot. Framing is STRICTLY chin-down: crop at or below the lower lip/chin — zero eyes, eyebrows, forehead, nose bridge, or full face. Show only neck, throat, décolleté, shoulders, collarbone, ears. If a face reference is provided, use only for tone; still no visible face above the chin. Shallow depth of field; jewellery is the hero.`;
+        `Editorial photo: woman wearing the jewellery. ${ONE_PHOTO_RULE} Recreate jewellery from reference in-scene (never paste reference as a panel). Chin-down crop only — neck, décolleté, ears; no eyes or full face. Jewellery is hero.`;
 
       const productShotExtra =
-        `TASK: ONE studio PRODUCT PHOTO only.${noCollage} Full-frame #ffffff background; soft contact shadow; unworn jewellery only (flat or suspended). ZERO humans, ZERO skin, ZERO fabric, ZERO room, ZERO outdoor scene.${antiSplit} ZERO logos, ZERO brand names, ZERO text, ZERO watermarks. Macro sharp.`;
+        `Studio packshot on #ffffff. ${ONE_PHOTO_RULE} Unworn jewellery only; soft shadow; no humans, skin, fabric, room, logos, or text.`;
 
       let fullPrompt;
       if (shotMode === 'product') {
@@ -146,9 +160,7 @@ async function handleGenerateImage(request, reply) {
           productSpecsRaw ||
           'Studio packshot on pure white; unworn jewellery only; soft contact shadow.';
         fullPrompt = `${productShotExtra}
-
-CRITICAL: The reference may show a person or mixed layout — IGNORE that. Use the reference ONLY to copy the jewellery design, stones, and metal. Output must be a single packshot on pure white — not a composite, not a split, not worn.
-
+Use reference for jewellery design only (ignore any person in reference).
 Subject: ${focus}
 Jewellery type context: ${piece}.
 Overall theme / lighting: ${theme}
@@ -209,57 +221,37 @@ Angle / pose: ${variation}`;
           throw new Error('Stability Error');
         }
       } else if (model === 'gemini' && process.env.GEMINI_API_KEY) {
+        const genStarted = Date.now();
         const { GoogleGenerativeAI } = require('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const geminiSystem = [
-          'You generate exactly ONE photograph per request.',
-          'Never output split-screen, diptychs, collages, magazine layouts, before/after, or picture-in-picture.',
-          'Never embed a second photograph or inset inside the frame.',
-          'If reference images are provided, use them only for design continuity — do not paste them as separate panels.',
-        ].join(' ');
+        const geminiSystem =
+          'Generate exactly ONE photograph per request. No split-screen, collage, or inset panels. References are for design continuity only.';
         const aiModel = genAI.getGenerativeModel({
           model: process.env.GEMINI_MODEL || 'gemini-3.1-flash-image-preview',
           systemInstruction: geminiSystem,
         });
 
-        let promptParts;
-        if (shotMode === 'product' && jewelleryImage) {
-          const split = jewelleryImage.split(',');
-          const refLabel =
-            'REFERENCE (design extraction only): The next image may show a person, split layout, or mixed scene — IGNORE all of that. Copy only the jewellery design, then output ONE unworn full-frame packshot on pure #ffffff. No humans, no split, no logo, no text.';
-          if (split.length === 2) {
-            const mimeType =
-              split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-            promptParts = [fullPrompt, refLabel, { inlineData: { mimeType: mimeType, data: split[1] } }];
-          } else {
-            promptParts = [fullPrompt];
-          }
-        } else {
-          promptParts = [fullPrompt];
-          if (jewelleryImage) {
-            const split = jewelleryImage.split(',');
-            if (split.length === 2) {
-              const mimeType =
-                split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-              const modelJewelleryRef =
-                'REFERENCE (design only — NOT an output panel): The next image may be a packshot on white or a worn shot. Do NOT composite it as a second tile, inset, or split. Generate ONE new chin-down photo of a model wearing this exact jewellery; the reference must not appear as a separate picture inside the result.';
-              promptParts.push(modelJewelleryRef);
-              promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
-            }
-          }
-        }
+        const promptParts = [fullPrompt];
+        const appendInline = (dataUrl) => {
+          const split = dataUrl.split(',');
+          if (split.length !== 2) return;
+          const mimeType =
+            split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
+          promptParts.push({ inlineData: { mimeType, data: split[1] } });
+        };
 
-        const useModelRef = shotMode !== 'product' && modelImage;
-        if (useModelRef) {
-          const split = modelImage.split(',');
-          if (split.length === 2) {
-            const mimeType =
-              split[0].match(/data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/)?.[1] || 'image/jpeg';
-            promptParts.push({ inlineData: { mimeType: mimeType, data: split[1] } });
-          }
+        if (jewelleryImage) {
+          appendInline(jewelleryImage);
+        }
+        if (shotMode !== 'product' && modelImage) {
+          appendInline(modelImage);
         }
 
         const result = await aiModel.generateContent(promptParts);
+        request.server.log.info(
+          { slot: clientSlotIndex, ms: Date.now() - genStarted },
+          'Gemini generateContent finished'
+        );
         const data = result.response;
 
         const firstPart =
