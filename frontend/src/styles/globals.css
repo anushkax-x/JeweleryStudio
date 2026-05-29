@@ -13,54 +13,106 @@
   }
 
   body {
-    background-color: #f5f3ef;
-    color: #141310;
+    background-color: #f8f6f2;
+    color: #1a1814;
     min-height: 100vh;
     overflow-x: hidden;
     font-family: var(--font-sans);
+    font-feature-settings: "kern" 1, "liga" 1;
   }
 
   ::selection {
-    background: rgba(154, 123, 79, 0.2);
-    color: #141310;
+    background: rgba(143, 115, 72, 0.18);
+    color: #1a1814;
   }
 }
 
 @layer utilities {
+  .studio-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      #ebe6de 12%,
+      #ebe6de 88%,
+      transparent
+    );
+  }
+
   .minimal-select {
     appearance: none;
     cursor: pointer;
-    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%236f6a63%22%2F%3E%3C%2Fsvg%3E");
+    background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%23a39e96%22%2F%3E%3C%2Fsvg%3E");
     background-repeat: no-repeat;
-    background-position: right 0.25rem center;
-    padding-right: 1.25rem;
+    background-position: right 0.75rem center;
+    padding-right: 2rem;
   }
 
   .field-input {
     width: 100%;
-    border-radius: 0.75rem;
-    border: 1px solid #e6e1d9;
-    background-color: #ffffff;
-    padding: 0.75rem 1rem;
-    font-size: 0.9rem;
-    color: #141310;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    border-radius: 0.625rem;
+    border: 1px solid #ebe6de;
+    background-color: #faf9f7;
+    padding: 0.625rem 0.875rem;
+    font-size: 0.875rem;
+    color: #1a1814;
+    transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+  }
+
+  .field-input:hover {
+    border-color: #ddd6cb;
   }
 
   .field-input::placeholder {
-    color: #9c958c;
+    color: #a39e96;
   }
 
   .field-input:focus {
-    border-color: #9a7b4f;
+    border-color: #8f7348;
+    background-color: #ffffff;
     outline: none;
-    box-shadow: 0 0 0 3px rgba(154, 123, 79, 0.12);
+    box-shadow: 0 0 0 3px rgba(143, 115, 72, 0.1);
   }
 
   .field-textarea {
     resize: vertical;
-    line-height: 1.6;
-    min-height: 88px;
+    line-height: 1.55;
+    min-height: 72px;
+  }
+
+  .btn-primary {
+    border-radius: 9999px;
+    background-color: #1a1814;
+    color: #ffffff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    padding: 0.875rem 2rem;
+    transition: background-color 0.2s, transform 0.15s, box-shadow 0.2s;
+    box-shadow: 0 4px 14px rgba(26, 24, 20, 0.15);
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: #8f7348;
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(26, 24, 20, 0.12);
+  }
+
+  .btn-primary:disabled {
+    background-color: #ebe6de;
+    color: #a39e96;
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+
+  .btn-ghost {
+    font-size: 0.8rem;
+    color: #6b665e;
+    transition: color 0.15s;
+  }
+
+  .btn-ghost:hover {
+    color: #1a1814;
   }
 }
 

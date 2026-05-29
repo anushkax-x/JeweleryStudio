@@ -1,26 +1,28 @@
-export default function Counter({ label, value, onChange, min = 0 }) {
+export default function Counter({ label, value, onChange, min = 0, compact }) {
   return (
-    <div>
-      <p className="text-[0.7rem] font-medium uppercase tracking-[0.12em] text-subtle mb-2">{label}</p>
-      <div className="inline-flex items-center rounded-xl border border-line bg-canvas">
+    <div className={compact ? '' : ''}>
+      <p
+        className={`font-medium uppercase tracking-[0.1em] text-subtle ${
+          compact ? 'mb-1.5 text-[0.62rem]' : 'mb-2 text-[0.65rem]'
+        }`}
+      >
+        {label}
+      </p>
+      <div className="inline-flex items-center rounded-lg border border-line bg-surface shadow-sm">
         <button
           type="button"
-          className="h-10 w-10 text-muted hover:text-ink transition-colors text-lg"
+          className="flex h-9 w-9 items-center justify-center text-muted transition-colors hover:text-ink"
           onClick={() => onChange(Math.max(min, value - 1))}
           aria-label={`Decrease ${label}`}
         >
           −
         </button>
-        <input
-          type="number"
-          className="w-12 bg-transparent text-center text-[0.95rem] font-medium text-ink focus:outline-none"
-          value={value}
-          min={min}
-          onChange={(e) => onChange(Math.max(min, Number(e.target.value) || 0))}
-        />
+        <span className="min-w-[2rem] text-center text-[0.9rem] font-medium tabular-nums text-ink">
+          {value}
+        </span>
         <button
           type="button"
-          className="h-10 w-10 text-muted hover:text-ink transition-colors text-lg"
+          className="flex h-9 w-9 items-center justify-center text-muted transition-colors hover:text-ink"
           onClick={() => onChange(value + 1)}
           aria-label={`Increase ${label}`}
         >

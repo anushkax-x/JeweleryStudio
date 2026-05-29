@@ -17,53 +17,42 @@ export default function Home() {
         <meta name="description" content="Premium AI photoshoot studio for jewellery brands" />
       </Head>
 
-      <div className="min-h-screen bg-canvas">
-        <div className="pointer-events-none fixed inset-0 overflow-hidden">
-          <div className="absolute -top-32 right-0 h-96 w-96 rounded-full bg-accent-muted blur-3xl" />
-          <div className="absolute bottom-0 left-0 h-80 w-80 rounded-full bg-[#e8e4de]/60 blur-3xl" />
-        </div>
+      <div className="relative min-h-screen">
+        <div
+          className="pointer-events-none fixed inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(143,115,72,0.08),transparent)]"
+          aria-hidden
+        />
 
-        <div className="relative mx-auto max-w-6xl px-5 py-10 sm:px-8 sm:py-14">
-          <header className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+        <div className="relative mx-auto max-w-2xl px-5 pb-12 pt-6 sm:px-6 sm:pt-8">
+          <header className="mb-6 grid grid-cols-1 items-end gap-4 sm:grid-cols-2 sm:gap-8">
             <div>
-              <p className="text-[0.7rem] font-medium uppercase tracking-[0.2em] text-accent">Studio</p>
-              <h1 className="font-display mt-2 text-4xl font-medium tracking-tight text-ink sm:text-5xl">
+              <p className="text-[0.65rem] font-medium uppercase tracking-[0.28em] text-accent">
+                Jewellery studio
+              </p>
+              <h1 className="font-display mt-1 text-[2.25rem] font-medium leading-none tracking-tight text-ink sm:text-[2.75rem]">
                 Anoree
               </h1>
-              <p className="mt-3 max-w-md text-[0.95rem] leading-relaxed text-muted">
-                Editorial model shots and product packshots — crafted from your pieces and creative direction.
-              </p>
             </div>
-            <div className="flex gap-6 text-[0.8rem] text-muted">
-              <div>
-                <span className="block text-2xl font-display text-ink">{modelCentric + enhancedProduct}</span>
-                shots per run
-              </div>
-              <div className="w-px bg-line" />
-              <div>
-                <span className="block text-2xl font-display text-ink">AI</span>
-                powered
-              </div>
-            </div>
+            <p className="text-[0.88rem] leading-relaxed text-muted sm:text-right sm:max-w-[16rem] sm:justify-self-end">
+              Upload your piece, set creative direction, and receive editorial &amp; product imagery.
+            </p>
           </header>
 
-          <div className="mx-auto max-w-3xl">
-            <JewelleryStudio
-              masterPrompt={masterPrompt}
-              setMasterPrompt={setMasterPrompt}
-              modelPrompt={modelPrompt}
-              setModelPrompt={setModelPrompt}
-              productPrompt={productPrompt}
-              setProductPrompt={setProductPrompt}
-              modelCount={modelCentric}
-              setModelCount={setModelCentric}
-              productCount={enhancedProduct}
-              setProductCount={setEnhancedProduct}
-            />
-          </div>
+          <JewelleryStudio
+            masterPrompt={masterPrompt}
+            setMasterPrompt={setMasterPrompt}
+            modelPrompt={modelPrompt}
+            setModelPrompt={setModelPrompt}
+            productPrompt={productPrompt}
+            setProductPrompt={setProductPrompt}
+            modelCount={modelCentric}
+            setModelCount={setModelCentric}
+            productCount={enhancedProduct}
+            setProductCount={setEnhancedProduct}
+          />
 
-          <footer className="mt-16 border-t border-line pt-8 text-center text-[0.75rem] text-subtle">
-            Anoree · Jewellery imagery for modern brands
+          <footer className="mt-12 text-center text-[0.7rem] tracking-wide text-subtle">
+            Anoree
           </footer>
         </div>
       </div>

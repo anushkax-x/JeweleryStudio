@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { DEFAULT_MODEL_PROMPT, DEFAULT_PRODUCT_PROMPT } from '../lib/promptDefaults';
 import Card from './ui/Card';
-import SectionLabel from './ui/SectionLabel';
+import StepHeader from './ui/StepHeader';
 import Counter from './ui/Counter';
 
 const API_BASE_URL = '/api';
@@ -13,9 +13,9 @@ function applyPromptToForm(p, setters) {
   setProductPrompt(p.productPrompt ?? DEFAULT_PRODUCT_PROMPT);
 }
 
-function CompactLabel({ children }) {
+function FieldLabel({ children }) {
   return (
-    <p className="mb-1 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-subtle">{children}</p>
+    <p className="mb-1.5 text-[0.62rem] font-medium uppercase tracking-[0.14em] text-subtle">{children}</p>
   );
 }
 
@@ -97,7 +97,7 @@ export default function PromptStudio({
       });
       const data = await res.json();
       if (!res.ok) {
-        setSaveStatus('Save failed');
+        setSaveStatus('Failed');
         return;
       }
       if (data.prompt) {
@@ -111,7 +111,7 @@ export default function PromptStudio({
       setSaveStatus('Saved');
     } catch (err) {
       console.error(err);
-      setSaveStatus('Save failed');
+      setSaveStatus('Failed');
     }
   };
 
@@ -139,29 +139,23 @@ export default function PromptStudio({
     setSaveStatus('');
   };
 
-  const compactField = 'field-input !py-2 !text-[0.85rem]';
-  const compactTextarea = `${compactField} field-textarea !min-h-[52px]`;
+  const field = 'field-input !py-2 !text-[0.84rem] !bg-[#faf9f7]';
+  const textarea = `${field} field-textarea !min-h-[4.5rem]`;
 
-  const body = embedded ? (
+  const embeddedBody = (
     <>
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[0.75rem] font-semibold text-surface">
-            3
-          </span>
-          <h2 className="font-display text-xl font-medium text-ink">Prompt lab</h2>
+      <StepHeader step={3} title="Prompt lab">
+        <div className="flex gap-5">
+          <Counter compact label="Model" value={modelCentric} onChange={setModelCentric} />
+          <Counter compact label="Product" value={enhancedProduct} onChange={setEnhancedProduct} />
         </div>
-        <div className="flex gap-6">
-          <Counter label="Model shots" value={modelCentric} onChange={setModelCentric} />
-          <Counter label="Product shots" value={enhancedProduct} onChange={setEnhancedProduct} />
-        </div>
-      </div>
+      </StepHeader>
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div>
-          <CompactLabel>Preset</CompactLabel>
+          <FieldLabel>Preset</FieldLabel>
           <select
-            className={`minimal-select ${compactField}`}
+            className={`minimal-select ${field}`}
             value={activePromptId || ''}
             onChange={(e) => {
               const p = prompts.find((pr) => String(pr.id) === e.target.value);
@@ -169,7 +163,7 @@ export default function PromptStudio({
             }}
           >
             <option value="" disabled>
-              Choose preset…
+              Load preset…
             </option>
             {prompts.map((p) => (
               <option key={p.id} value={p.id}>
@@ -179,12 +173,12 @@ export default function PromptStudio({
           </select>
         </div>
         <div>
-          <CompactLabel>Preset name</CompactLabel>
+          <FieldLabel>Name</FieldLabel>
           <input
             type="text"
-            className={compactField}
+            className={field}
             value={currentTitle}
-            placeholder="Summer collection"
+            placeholder="e.g. Summer"
             onChange={(e) => setCurrentTitle(e.target.value)}
           />
         </div>
@@ -192,78 +186,70 @@ export default function PromptStudio({
 
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <div>
-          <CompactLabel>Master</CompactLabel>
+          <FieldLabel>Master</FieldLabel>
           <textarea
-            className={compactTextarea}
+            className={textarea}
             rows={2}
-            placeholder="Lighting, mood…"
+            placeholder="Light & mood"
             value={masterPrompt}
             onChange={(e) => setMasterPrompt(e.target.value)}
           />
         </div>
         <div>
-          <CompactLabel>Model</CompactLabel>
+          <FieldLabel>Model</FieldLabel>
           <textarea
-            className={compactTextarea}
+            className={textarea}
             rows={2}
-            placeholder="Framing, pose…"
+            placeholder="Framing"
             value={modelPrompt}
             onChange={(e) => setModelPrompt(e.target.value)}
           />
         </div>
         <div>
-          <CompactLabel>Product</CompactLabel>
+          <FieldLabel>Product</FieldLabel>
           <textarea
-            className={compactTextarea}
+            className={textarea}
             rows={2}
-            placeholder="Packshot style…"
+            placeholder="Packshot"
             value={productPrompt}
             onChange={(e) => setProductPrompt(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <button
           type="button"
-          className="rounded-full bg-ink px-4 py-2 text-[0.8rem] font-medium text-surface transition-colors hover:bg-accent-hover"
+          className="rounded-lg bg-canvas px-4 py-2 text-[0.78rem] font-medium text-ink ring-1 ring-line transition-colors hover:bg-surface"
           onClick={handleSave}
         >
           Save preset
         </button>
-        <button
-          type="button"
-          className="text-[0.8rem] text-muted transition-colors hover:text-ink"
-          onClick={handleAdd}
-        >
+        <button type="button" className="btn-ghost" onClick={handleAdd}>
           New
         </button>
         {saveStatus && (
-          <span className={`text-[0.75rem] ${saveStatus === 'Saved' ? 'text-success' : 'text-danger'}`}>
+          <span className={`text-[0.72rem] ${saveStatus === 'Saved' ? 'text-success' : 'text-danger'}`}>
             {saveStatus}
           </span>
         )}
         {activePromptId && (
-          <button
-            type="button"
-            className="ml-auto text-[0.8rem] text-danger/80 hover:text-danger"
-            onClick={handleDelete}
-          >
+          <button type="button" className="btn-ghost ml-auto text-danger/90 hover:text-danger" onClick={handleDelete}>
             Delete
           </button>
         )}
       </div>
 
-      {prompts.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
+      {prompts.length > 1 && (
+        <div className="mt-4 flex flex-wrap gap-1.5 border-t border-line pt-4">
           {prompts.map((p) => (
             <button
               key={p.id}
               type="button"
-              className={`rounded-full px-3 py-1 text-[0.75rem] transition-all ${
+              className={`rounded-md px-2.5 py-1 text-[0.72rem] transition-all ${
                 String(activePromptId) === String(p.id)
                   ? 'bg-ink text-surface'
-                  : 'bg-canvas text-muted ring-1 ring-line hover:text-ink'
+                  : 'text-muted hover:bg-canvas hover:text-ink'
               }`}
               onClick={() => handleSelect(p)}
             >
@@ -273,140 +259,11 @@ export default function PromptStudio({
         </div>
       )}
     </>
-  ) : (
-    <>
-      <div className="mb-6 border-b border-line pb-5">
-        <p className="text-[0.7rem] font-medium uppercase tracking-[0.2em] text-accent">Creative direction</p>
-        <h2 className="font-display mt-1 text-2xl font-medium text-ink">Prompt lab</h2>
-      </div>
-
-      <div className="mb-8 flex gap-8">
-        <Counter label="Model shots" value={modelCentric} onChange={setModelCentric} />
-        <Counter label="Product shots" value={enhancedProduct} onChange={setEnhancedProduct} />
-      </div>
-
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <SectionLabel>Preset</SectionLabel>
-          <select
-            className="minimal-select field-input"
-            value={activePromptId || ''}
-            onChange={(e) => {
-              const p = prompts.find((pr) => String(pr.id) === e.target.value);
-              if (p) handleSelect(p);
-            }}
-          >
-            <option value="" disabled>
-              Choose saved preset…
-            </option>
-            {prompts.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.title}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <SectionLabel>Preset name</SectionLabel>
-          <input
-            type="text"
-            className="field-input"
-            value={currentTitle}
-            placeholder="Summer collection"
-            onChange={(e) => setCurrentTitle(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-5">
-        <div>
-          <SectionLabel hint="Lighting, mood, overall aesthetic">Master</SectionLabel>
-          <textarea
-            className="field-input field-textarea"
-            rows={2}
-            placeholder="Warm golden-hour light, soft shadows…"
-            value={masterPrompt}
-            onChange={(e) => setMasterPrompt(e.target.value)}
-          />
-        </div>
-        <div>
-          <SectionLabel hint="Framing and pose for on-model shots">Model</SectionLabel>
-          <textarea
-            className="field-input field-textarea"
-            rows={2}
-            placeholder="Chin-down crop, jewellery as hero…"
-            value={modelPrompt}
-            onChange={(e) => setModelPrompt(e.target.value)}
-          />
-        </div>
-        <div>
-          <SectionLabel hint="Packshot style on white">Product</SectionLabel>
-          <textarea
-            className="field-input field-textarea"
-            rows={2}
-            placeholder="Pure white studio, soft shadow…"
-            value={productPrompt}
-            onChange={(e) => setProductPrompt(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-line pt-6">
-        <button
-          type="button"
-          className="rounded-full bg-ink px-5 py-2.5 text-[0.85rem] font-medium text-surface transition-colors hover:bg-accent-hover"
-          onClick={handleSave}
-        >
-          Save preset
-        </button>
-        <button
-          type="button"
-          className="text-[0.85rem] text-muted transition-colors hover:text-ink"
-          onClick={handleAdd}
-        >
-          New
-        </button>
-        {saveStatus && (
-          <span className={`text-[0.8rem] ${saveStatus === 'Saved' ? 'text-success' : 'text-danger'}`}>
-            {saveStatus}
-          </span>
-        )}
-        {activePromptId && (
-          <button
-            type="button"
-            className="ml-auto text-[0.85rem] text-danger/80 hover:text-danger"
-            onClick={handleDelete}
-          >
-            Delete
-          </button>
-        )}
-      </div>
-
-      {prompts.length > 0 && (
-        <div className="mt-8">
-          <SectionLabel>Library</SectionLabel>
-          <div className="flex flex-wrap gap-2">
-            {prompts.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                className={`rounded-full px-4 py-1.5 text-[0.8rem] transition-all ${
-                  String(activePromptId) === String(p.id)
-                    ? 'bg-ink text-surface'
-                    : 'bg-canvas text-muted ring-1 ring-line hover:text-ink'
-                }`}
-                onClick={() => handleSelect(p)}
-              >
-                {p.title || 'Untitled'}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </>
   );
 
-  return (
-    <Card className={embedded ? '!p-5' : 'animate-slide-up'}>{body}</Card>
-  );
+  if (embedded) {
+    return embeddedBody;
+  }
+
+  return <Card className="animate-slide-up p-6 sm:p-8">{embeddedBody}</Card>;
 }

@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom';
 import { buildGenerationJobs } from '../lib/photoGenerationPlan';
 import { compressImageFile } from '../lib/compressImage';
 import Card from './ui/Card';
-import SectionLabel from './ui/SectionLabel';
+import StepHeader from './ui/StepHeader';
 import UploadZone from './ui/UploadZone';
 import PromptStudio from './PromptStudio';
 
@@ -31,18 +31,18 @@ function GenerationLoader({ completed, total, label, startedAt }) {
   const pct = Math.round((completed / safeTotal) * 100);
 
   return (
-    <div className="mb-8 rounded-xl bg-canvas px-4 py-3" role="status" aria-live="polite" aria-busy="true">
-      <div className="mb-2 flex justify-between text-[0.8rem]">
+    <div className="mb-6 rounded-lg bg-canvas/80 px-4 py-3 ring-1 ring-line" role="status" aria-live="polite">
+      <div className="mb-2 flex justify-between text-[0.78rem]">
         <span className="truncate text-ink">
           {completed} of {total}
           {label ? ` · ${label}` : ''}
         </span>
-        <span className="shrink-0 tabular-nums text-muted">{formatElapsed(elapsed)}</span>
+        <span className="shrink-0 tabular-nums text-subtle">{formatElapsed(elapsed)}</span>
       </div>
-      <div className="h-0.5 overflow-hidden rounded-full bg-line">
+      <div className="h-px overflow-hidden rounded-full bg-line">
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-300 ease-out"
-          style={{ width: `${Math.max(pct, completed > 0 ? 4 : 2)}%` }}
+          className="h-full rounded-full bg-accent transition-[width] duration-500 ease-out"
+          style={{ width: `${Math.max(pct, completed > 0 ? 3 : 1)}%` }}
         />
       </div>
     </div>
@@ -119,26 +119,18 @@ export default function JewelleryStudio({
       const res = await fetch(`${API_BASE_URL}/generate-image`, {
         method: 'POST',
         cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
+        headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
         body: JSON.stringify(body),
       });
       const text = await res.text();
-      if (!res.ok) {
-        throw new Error(`generate-image failed (${res.status}): ${text.slice(0, 200)}`);
-      }
+      if (!res.ok) throw new Error(`generate-image failed (${res.status}): ${text.slice(0, 200)}`);
       return JSON.parse(text);
     };
 
     try {
       const data = await runOnce();
       if (generationRunRef.current !== runId) return;
-      if (data.clientSlotIndex !== undefined && data.clientSlotIndex !== index) {
-        console.warn('Slot mismatch from API; ignoring frame', { expected: index, got: data.clientSlotIndex });
-        return;
-      }
+      if (data.clientSlotIndex !== undefined && data.clientSlotIndex !== index) return;
       setImages((prev) => {
         const next = [...prev];
         next[index] = data.imageUrl;
@@ -183,12 +175,7 @@ export default function JewelleryStudio({
       setSlotLabels(jobs.map((j) => j.label));
       setImages(Array(jobs.length).fill(null));
       setLoadingStates(Array(jobs.length).fill(true));
-      setGenerationProgress({
-        completed: 0,
-        total: jobs.length,
-        label: jobs[0].label,
-        startedAt,
-      });
+      setGenerationProgress({ completed: 0, total: jobs.length, label: jobs[0].label, startedAt });
     });
 
     const jobItems = jobs.map((job, index) => ({ job, index }));
@@ -200,8 +187,7 @@ export default function JewelleryStudio({
         await generateImage(index, provider, job, runId, () => {
           if (generationRunRef.current !== runId) return;
           completedCount += 1;
-          const nextJob = jobs[completedCount];
-          updateProgress(nextJob?.label || job.label);
+          updateProgress(jobs[completedCount]?.label || job.label);
         });
       });
 
@@ -223,18 +209,12 @@ export default function JewelleryStudio({
 
   useEffect(() => {
     setMounted(true);
-    const fetchModels = async () => {
-      try {
-        const res = await fetch(`${API_BASE_URL}/available-models`);
-        const data = await res.json();
-        if (data?.models?.length > 0) {
-          setAvailableModels(data.models);
-        }
-      } catch (err) {
-        console.error('Failed to fetch available models:', err);
-      }
-    };
-    fetchModels();
+    fetch(`${API_BASE_URL}/available-models`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.models?.length > 0) setAvailableModels(data.models);
+      })
+      .catch(console.error);
   }, []);
 
   const isGenerating = loadingStates.some((l) => l);
@@ -246,35 +226,34 @@ export default function JewelleryStudio({
   const productIndices = Array.from({ length: Math.max(0, productCount) }, (_, i) => modelCount + i);
 
   const renderSlot = (index, label) => {
-    const isLoading = loadingStates[index];
     const hasImage = Boolean(images[index]);
     return (
       <div
         key={`slot-${index}`}
-        className="group relative aspect-[4/5] overflow-hidden rounded-xl bg-canvas ring-1 ring-line"
+        className="group relative aspect-[4/5] overflow-hidden rounded-lg bg-canvas ring-1 ring-line"
       >
         {!hasImage ? (
           <div
-            className="h-full w-full bg-gradient-to-r from-[#ebe7e0] via-[#f0ece6] to-[#ebe7e0] bg-[length:200%_100%] animate-shimmer"
-            aria-label={isLoading ? 'Generating' : 'Waiting'}
+            className="h-full w-full bg-gradient-to-r from-[#f0ece6] via-[#f8f6f2] to-[#f0ece6] bg-[length:200%_100%] animate-shimmer"
+            aria-label={loadingStates[index] ? 'Generating' : 'Waiting'}
           />
         ) : (
           <>
             <img src={images[index]} alt={label} className="h-full w-full object-cover animate-fade-in" />
-            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-gradient-to-t from-ink/70 to-transparent p-4 opacity-0 transition-opacity group-hover:opacity-100">
+            <div className="absolute inset-x-0 bottom-0 flex justify-center gap-2 bg-gradient-to-t from-ink/60 to-transparent p-3 opacity-0 transition-opacity duration-300 group-hover:opacity-100">
               <button
                 type="button"
-                className="rounded-full bg-surface/95 px-4 py-1.5 text-[0.75rem] font-medium text-ink shadow-sm hover:bg-white"
+                className="rounded-md bg-surface/95 px-3 py-1 text-[0.7rem] font-medium text-ink backdrop-blur-sm"
                 onClick={() => setEnlargedImage(images[index])}
               >
-                Preview
+                View
               </button>
               <a
-                className="rounded-full bg-surface/95 px-4 py-1.5 text-[0.75rem] font-medium text-ink no-underline shadow-sm hover:bg-white"
+                className="rounded-md bg-surface/95 px-3 py-1 text-[0.7rem] font-medium text-ink no-underline backdrop-blur-sm"
                 href={images[index]}
                 download={`anoree-${index + 1}.jpg`}
               >
-                Download
+                Save
               </a>
             </div>
           </>
@@ -283,142 +262,134 @@ export default function JewelleryStudio({
     );
   };
 
+  const sectionPad = 'px-6 py-7 sm:px-8 sm:py-8';
+
   return (
-    <div className="space-y-6 animate-slide-up">
-      <Card>
-        <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink text-[0.75rem] font-semibold text-surface">
-            1
-          </span>
-          <h2 className="font-display text-xl font-medium text-ink">Upload references</h2>
-        </div>
+    <div className="animate-slide-up space-y-5">
+      <Card className="overflow-hidden !p-0 shadow-inset">
+        <section className={sectionPad}>
+          <StepHeader step={1} title="References" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <UploadZone
+              label="Jewellery"
+              hint="Used for every shot in this run"
+              preview={jewelleryImage}
+              onChange={(e) => handleImageUpload(e, setJewelleryImage)}
+            />
+            <UploadZone
+              label="Model"
+              hint="Tone reference for editorial shots"
+              preview={modelImage}
+              emptyLabel="Optional"
+              optional
+              onChange={(e) => handleImageUpload(e, setModelImage)}
+            />
+          </div>
+        </section>
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <UploadZone
-            label="Jewellery"
-            hint="The piece to photograph — used for all shots"
-            preview={jewelleryImage}
-            onChange={(e) => handleImageUpload(e, setJewelleryImage)}
+        <div className="studio-divider" />
+
+        <section className={sectionPad}>
+          <StepHeader step={2} title="Piece" />
+          <label className="mb-1.5 block text-[0.65rem] font-medium uppercase tracking-[0.12em] text-subtle">
+            Type
+          </label>
+          <select className="minimal-select field-input" value={type} onChange={(e) => setType(e.target.value)}>
+            <option value="">Select…</option>
+            <option value="necklace">Necklace</option>
+            <option value="necklace_set">Necklace set</option>
+            <option value="earrings">Earrings</option>
+            <option value="ring">Ring</option>
+            <option value="bracelet">Bracelet</option>
+          </select>
+        </section>
+
+        <div className="studio-divider" />
+
+        <section className={sectionPad}>
+          <PromptStudio
+            embedded
+            masterPrompt={masterPrompt}
+            setMasterPrompt={setMasterPrompt}
+            modelPrompt={modelPrompt}
+            setModelPrompt={setModelPrompt}
+            productPrompt={productPrompt}
+            setProductPrompt={setProductPrompt}
+            modelCentric={modelCount}
+            setModelCentric={setModelCount}
+            enhancedProduct={productCount}
+            setEnhancedProduct={setProductCount}
           />
-          <UploadZone
-            label="Model reference"
-            hint="Face or tone reference for editorial shots only"
-            preview={modelImage}
-            emptyLabel="Optional"
-            optional
-            onChange={(e) => handleImageUpload(e, setModelImage)}
-          />
-        </div>
+        </section>
       </Card>
 
-      <Card>
-        <div className="mb-5 flex items-center gap-3">
-          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-ink text-[0.75rem] font-semibold text-surface">
-            2
-          </span>
-          <h2 className="font-display text-xl font-medium text-ink">Piece details</h2>
-        </div>
-
-        <SectionLabel hint="Helps frame angles and product vs model shots">Jewellery type</SectionLabel>
-        <select className="minimal-select field-input" value={type} onChange={(e) => setType(e.target.value)}>
-          <option value="">Select type…</option>
-          <option value="necklace">Necklace</option>
-          <option value="necklace_set">Necklace set</option>
-          <option value="earrings">Earrings</option>
-          <option value="ring">Ring</option>
-          <option value="bracelet">Bracelet</option>
-        </select>
-      </Card>
-
-      <PromptStudio
-        embedded
-        masterPrompt={masterPrompt}
-        setMasterPrompt={setMasterPrompt}
-        modelPrompt={modelPrompt}
-        setModelPrompt={setModelPrompt}
-        productPrompt={productPrompt}
-        setProductPrompt={setProductPrompt}
-        modelCentric={modelCount}
-        setModelCentric={setModelCount}
-        enhancedProduct={productCount}
-        setEnhancedProduct={setProductCount}
-      />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          {totalPics === 0 ? (
-            <p className="text-[0.85rem] text-muted">Set at least one shot count in Prompt lab above</p>
-          ) : (
-            <p className="text-[0.85rem] text-muted">
-              Ready to generate <span className="font-medium text-ink">{totalPics}</span> image
-              {totalPics === 1 ? '' : 's'}
-            </p>
-          )}
-        </div>
-        <button
-          type="button"
-          className={`rounded-full px-8 py-3.5 text-[0.9rem] font-medium tracking-wide transition-all ${
-            canGenerate
-              ? 'bg-ink text-surface shadow-lift hover:bg-accent-hover'
-              : 'cursor-not-allowed bg-line text-subtle'
-          }`}
-          onClick={handleGenerate}
-          disabled={!canGenerate}
-        >
-          {isGenerating ? `Generating…` : `Generate ${totalPics || 0} ${totalPics === 1 ? 'shot' : 'shots'}`}
+      <div className="rounded-2xl border border-line/80 bg-surface px-6 py-6 text-center shadow-card sm:px-8">
+        {totalPics === 0 ? (
+          <p className="mb-4 text-[0.85rem] text-muted">Add at least one shot in Prompt lab</p>
+        ) : (
+          <p className="mb-4 text-[0.85rem] text-muted">
+            <span className="font-medium text-ink">{totalPics}</span> images ready to generate
+          </p>
+        )}
+        <button type="button" className="btn-primary w-full sm:w-auto" onClick={handleGenerate} disabled={!canGenerate}>
+          {isGenerating ? 'Generating…' : `Generate ${totalPics || 0} ${totalPics === 1 ? 'shot' : 'shots'}`}
         </button>
       </div>
 
       {showResults && (
-        <Card className="!p-5 sm:!p-8">
-          <h2 className="font-display mb-6 text-2xl font-medium text-ink">Gallery</h2>
+        <Card className="!p-0 overflow-hidden">
+          <div className="border-b border-line px-6 py-5 sm:px-8">
+            <h2 className="font-display text-[1.5rem] font-medium text-ink">Gallery</h2>
+          </div>
 
-          {showLoader && (
-            <GenerationLoader
-              completed={generationProgress?.completed ?? 0}
-              total={generationProgress?.total ?? totalPics}
-              label={generationProgress?.label ?? ''}
-              startedAt={generationProgress?.startedAt}
-            />
-          )}
+          <div className="px-6 py-6 sm:px-8 sm:py-7">
+            {showLoader && (
+              <GenerationLoader
+                completed={generationProgress?.completed ?? 0}
+                total={generationProgress?.total ?? totalPics}
+                label={generationProgress?.label ?? ''}
+                startedAt={generationProgress?.startedAt}
+              />
+            )}
 
-          {modelCount > 0 && (
-            <div className="mb-10">
-              <p className="mb-4 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-subtle">
-                Editorial · on model
-              </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-                {modelIndices.map((index) =>
-                  renderSlot(index, slotLabels[index] || `Model ${index + 1}`),
-                )}
+            {modelCount > 0 && (
+              <div className={productCount > 0 ? 'mb-8' : ''}>
+                <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">
+                  Editorial
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
+                  {modelIndices.map((index) =>
+                    renderSlot(index, slotLabels[index] || `Model ${index + 1}`),
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {productCount > 0 && (
-            <div>
-              <p className="mb-4 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-subtle">
-                Product · studio packshot
-              </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4">
-                {productIndices.map((index) =>
-                  renderSlot(index, slotLabels[index] || `Product ${index - modelCount + 1}`),
-                )}
+            {productCount > 0 && (
+              <div>
+                <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">
+                  Product
+                </p>
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
+                  {productIndices.map((index) =>
+                    renderSlot(index, slotLabels[index] || `Product ${index - modelCount + 1}`),
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </Card>
       )}
 
       {enlargedImage && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/90 p-6 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-ink/88 p-6 backdrop-blur-md"
           onClick={() => setEnlargedImage(null)}
         >
-          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={(e) => e.stopPropagation()}>
+          <div className="relative max-h-[92vh] max-w-[92vw]" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              className="absolute -top-12 right-0 text-3xl text-surface/80 hover:text-surface"
+              className="absolute -right-1 -top-10 text-2xl text-surface/70 transition-colors hover:text-surface"
               onClick={() => setEnlargedImage(null)}
               aria-label="Close"
             >
@@ -427,7 +398,7 @@ export default function JewelleryStudio({
             <img
               src={enlargedImage}
               alt="Preview"
-              className="max-h-[90vh] max-w-full rounded-xl shadow-lift"
+              className="max-h-[92vh] max-w-full rounded-lg shadow-lift ring-1 ring-white/10"
             />
           </div>
         </div>
