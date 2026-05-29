@@ -1,8 +1,3 @@
-/**
- * Fixed pack: 3 model editorial shots + 2 product packshots.
- * (One provider call was failing; keep it to 5 total.)
- */
-
 export const MODEL_VARIATIONS = [
   'Straight-on: frame from just under the chin through upper chest; necklace and earrings visible; face above chin must be cropped out entirely.',
   'Three-quarter: neck and one ear in profile; chin tip may appear at top edge but no eyes or nose; macro detail on stones and metal.',
@@ -47,29 +42,38 @@ export function getProductFocuses(jewelleryType) {
   ];
 }
 
-export function buildGenerationJobs(jewelleryType) {
+function productLabel(jewelleryType, index) {
+  if (jewelleryType === 'necklace_set') {
+    return index === 0 ? 'Product · Necklace' : 'Product · Earrings (pair)';
+  }
+  return `Product · ${index + 1}`;
+}
+
+/**
+ * @param {string} jewelleryType
+ * @param {{ modelCount?: number, productCount?: number }} counts from Prompt lab
+ */
+export function buildGenerationJobs(jewelleryType, { modelCount = 0, productCount = 0 } = {}) {
+  const modelN = Math.max(0, Math.floor(modelCount));
+  const productN = Math.max(0, Math.floor(productCount));
   const productFocuses = getProductFocuses(jewelleryType);
   const jobs = [];
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < modelN; i += 1) {
     jobs.push({
       shotMode: 'model',
       label: `Model · ${i + 1}`,
-      modelVariation: MODEL_VARIATIONS[i],
+      modelVariation: MODEL_VARIATIONS[i % MODEL_VARIATIONS.length],
       productFocus: null,
     });
   }
-  const productLabels =
-    jewelleryType === 'necklace_set'
-      ? ['Product · Necklace', 'Product · Earrings (pair)']
-      : ['Product · 1', 'Product · 2'];
 
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < productN; i += 1) {
     jobs.push({
       shotMode: 'product',
-      label: productLabels[i],
+      label: productLabel(jewelleryType, i),
       modelVariation: null,
-      productFocus: productFocuses[i],
+      productFocus: productFocuses[i % productFocuses.length],
     });
   }
 

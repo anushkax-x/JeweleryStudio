@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "dev:all": "npx concurrently \"next dev\" \"PORT=3011 node ../backend/server.js\"",
+    "dev:all": "npx concurrently -n web,api -c blue,green \"next dev\" \"npx cross-env PORT=3011 node ../backend/server.js\"",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

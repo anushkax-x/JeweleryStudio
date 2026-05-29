@@ -1,13 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: 'http://localhost:3011/:path*',
-      },
-    ];
-  },
+  // API traffic is handled by src/pages/api/[...path].js (long timeout for Gemini).
 };
 
 module.exports = nextConfig;

@@ -3,7 +3,13 @@ import { buildGenerationJobs } from '../lib/photoGenerationPlan';
 
 const API_BASE_URL = '/api';
 
-export default function JewelleryStudio({ currentPrompt }) {
+export default function JewelleryStudio({
+  masterPrompt,
+  modelPrompt,
+  productPrompt,
+  modelCount = 0,
+  productCount = 0,
+}) {
   /** Increments each Generate click so late responses from an older run cannot write into the grid. */
   const generationRunRef = useRef(0);
   const [jewelleryImage, setJewelleryImage] = useState(null);
@@ -14,6 +20,7 @@ export default function JewelleryStudio({ currentPrompt }) {
   const [slotLabels, setSlotLabels] = useState([]);
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [availableModels, setAvailableModels] = useState(['gemini']);
+  const [genProgress, setGenProgress] = useState(null);
 
   const handleJewelleryUpload = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -37,7 +44,9 @@ export default function JewelleryStudio({ currentPrompt }) {
       jewelleryImage,
       modelImage: isProduct ? null : modelImage,
       type,
-      prompt: currentPrompt || 'Luxury jewellery photoshoot',
+      masterPrompt: masterPrompt || 'Luxury jewellery photoshoot',
+      modelPrompt,
+      productPrompt,
       model: modelName,
       shotMode: job.shotMode,
       productFocus: job.productFocus,
@@ -56,7 +65,11 @@ export default function JewelleryStudio({ currentPrompt }) {
         },
         body: JSON.stringify(body),
       });
-      return res.json();
+      const text = await res.text();
+      if (!res.ok) {
+        throw new Error(`generate-image failed (${res.status}): ${text.slice(0, 200)}`);
+      }
+      return JSON.parse(text);
     };
 
     try {
@@ -91,21 +104,36 @@ export default function JewelleryStudio({ currentPrompt }) {
     }
   };
 
+  const totalPics = Math.max(0, modelCount) + Math.max(0, productCount);
+
   const handleGenerate = () => {
-    const jobs = buildGenerationJobs(type);
+    const jobs = buildGenerationJobs(type, { modelCount, productCount });
     const provider = availableModels[0] || 'gemini';
     const runId = ++generationRunRef.current;
 
     setSlotLabels(jobs.map((j) => j.label));
     setImages(Array(jobs.length).fill(null));
     setLoadingStates(Array(jobs.length).fill(true));
+    setGenProgress({ current: 0, total: jobs.length, label: jobs[0]?.label || '' });
 
-    const staggerMs = 400;
-    jobs.forEach((job, index) => {
-      setTimeout(() => {
-        generateImage(index, provider, job, runId);
-      }, index * staggerMs);
-    });
+    // One image at a time — Gemini can take 1–2+ minutes per call.
+    (async () => {
+      for (let index = 0; index < jobs.length; index += 1) {
+        if (generationRunRef.current !== runId) {
+          setGenProgress(null);
+          return;
+        }
+        setGenProgress({
+          current: index + 1,
+          total: jobs.length,
+          label: jobs[index].label,
+        });
+        await generateImage(index, provider, jobs[index], runId);
+      }
+      if (generationRunRef.current === runId) {
+        setGenProgress(null);
+      }
+    })();
   };
 
   const [mounted, setMounted] = useState(false);
@@ -126,7 +154,52 @@ export default function JewelleryStudio({ currentPrompt }) {
     fetchModels();
   }, []);
 
-  const canGenerate = mounted && Boolean(jewelleryImage) && !loadingStates.some(l => l);
+  const canGenerate =
+    mounted && Boolean(jewelleryImage) && !loadingStates.some((l) => l) && totalPics > 0;
+
+  const modelIndices = Array.from({ length: Math.max(0, modelCount) }, (_, i) => i);
+  const productIndices = Array.from(
+    { length: Math.max(0, productCount) },
+    (_, i) => modelCount + i,
+  );
+
+  const renderSlot = (index, label) => {
+    const isLoading = loadingStates[index];
+    const hasImage = Boolean(images[index]);
+    return (
+      <div
+        key={`slot-${index}`}
+        className="aspect-[4/5] bg-bg-box rounded-[10px] overflow-hidden relative border border-border-color group"
+      >
+        {!hasImage ? (
+          <div
+            className="w-full h-full bg-gradient-to-r from-[#2d313a] via-[#3b404d] to-[#2d313a] bg-[length:200%_100%] animate-shimmer"
+            aria-label={isLoading ? 'Loading' : 'Waiting for image'}
+          />
+        ) : (
+          <>
+            <img src={images[index]} alt={label} className="w-full h-full object-cover fade-in" />
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 flex gap-2 justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+              <button
+                type="button"
+                className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30"
+                onClick={() => setEnlargedImage(images[index])}
+              >
+                Preview
+              </button>
+              <a
+                className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30 no-underline"
+                href={images[index]}
+                download={`shot-${index + 1}.jpg`}
+              >
+                Download
+              </a>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const svgArrow = "data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2212%22%20height%3D%228%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M1.41%200L6%204.58L10.59%200L12%201.41l-6%206-6-6z%22%20fill%3D%22%23a0a6b5%22%2F%3E%3C%2Fsvg%3E";
 
@@ -185,63 +258,65 @@ export default function JewelleryStudio({ currentPrompt }) {
         onClick={handleGenerate} 
         disabled={!canGenerate}
       >
-        {loadingStates.some(l => l) ? 'Generating 5 images…' : 'Generate 5 pictures (3 model + 2 product)'}
+        {loadingStates.some((l) => l)
+          ? `Generating ${totalPics} image${totalPics === 1 ? '' : 's'}…`
+          : `Generate ${totalPics} pic${totalPics === 1 ? '' : 's'}`}
       </button>
 
-      {(loadingStates.some(l => l) || images.some(img => img)) && (
+      {genProgress && genProgress.total > 0 && (
+        <div className="mt-4 p-4 bg-bg-box border border-border-color rounded-[10px]" role="status" aria-live="polite">
+          <div className="flex justify-between items-center gap-4 mb-2">
+            <span className="text-[0.85rem] text-text-primary font-medium">
+              Image {genProgress.current} of {genProgress.total}
+            </span>
+            <span className="text-[0.8rem] text-text-secondary truncate">{genProgress.label}</span>
+          </div>
+          <div className="h-2 bg-[#2d313a] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-brand rounded-full transition-[width] duration-500 ease-out"
+              style={{
+                width: `${Math.round((genProgress.current / genProgress.total) * 100)}%`,
+              }}
+            />
+          </div>
+          <p className="text-[0.75rem] text-text-secondary mt-2">
+            Each image can take 1–2 minutes. Please keep this tab open.
+          </p>
+        </div>
+      )}
+
+      {totalPics === 0 && (
+        <p className="text-text-secondary text-[0.85rem] mt-1">
+          Set Model touch and Product focus counts in Prompt lab (at least one).
+        </p>
+      )}
+
+      {(loadingStates.some((l) => l) || images.some((img) => img)) && (
         <div className="mt-8 space-y-10">
-          <div>
-            <h3 className="text-[0.75rem] uppercase tracking-wider text-[#7a8294] mb-3 font-medium">Model · close editorial (jewellery hero)</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[0, 1, 2].map((index) => {
-                const isLoading = loadingStates[index];
-                const label = slotLabels[index] || `Model · ${index + 1}`;
-                const hasImage = Boolean(images[index]);
-                return (
-                  <div key={`m-${index}`} className="aspect-[4/5] bg-bg-box rounded-[10px] overflow-hidden relative border border-border-color group">
-                    {/* Shimmer until we have a valid imageUrl (cleaner for recording). */}
-                    {!hasImage ? (
-                      <div className="w-full h-full bg-gradient-to-r from-[#2d313a] via-[#3b404d] to-[#2d313a] bg-[length:200%_100%] animate-shimmer" aria-label={isLoading ? 'Loading' : 'Waiting for image'}></div>
-                    ) : (
-                      <>
-                        <img src={images[index]} alt={label} className="w-full h-full object-cover fade-in" />
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 flex gap-2 justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                          <button type="button" className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30" onClick={() => setEnlargedImage(images[index])}>Preview</button>
-                          <a className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30 no-underline" href={images[index]} download={`model-${index + 1}.jpg`}>Download</a>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+          {modelCount > 0 && (
+            <div>
+              <h3 className="text-[0.75rem] uppercase tracking-wider text-[#7a8294] mb-3 font-medium">
+                Model · close editorial (jewellery hero)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {modelIndices.map((index) =>
+                  renderSlot(index, slotLabels[index] || `Model · ${index + 1}`),
+                )}
+              </div>
             </div>
-          </div>
-          <div>
-            <h3 className="text-[0.75rem] uppercase tracking-wider text-[#7a8294] mb-3 font-medium">Product · white background, soft shadow</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[3, 4].map((index) => {
-                const isLoading = loadingStates[index];
-                const label = slotLabels[index] || `Product · ${index - 2}`;
-                const hasImage = Boolean(images[index]);
-                return (
-                  <div key={`p-${index}`} className="aspect-[4/5] bg-bg-box rounded-[10px] overflow-hidden relative border border-border-color group">
-                    {/* Shimmer until we have a valid imageUrl (cleaner for recording). */}
-                    {!hasImage ? (
-                      <div className="w-full h-full bg-gradient-to-r from-[#2d313a] via-[#3b404d] to-[#2d313a] bg-[length:200%_100%] animate-shimmer" aria-label={isLoading ? 'Loading' : 'Waiting for image'}></div>
-                    ) : (
-                      <>
-                        <img src={images[index]} alt={label} className="w-full h-full object-cover fade-in" />
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 flex gap-2 justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                          <button type="button" className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30" onClick={() => setEnlargedImage(images[index])}>Preview</button>
-                          <a className="bg-white/20 border border-white/40 text-white px-3 py-1.5 rounded-full text-[0.8rem] cursor-pointer backdrop-blur-sm hover:bg-white/30 no-underline" href={images[index]} download={`product-${index - 2}.jpg`}>Download</a>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                );
-              })}
+          )}
+          {productCount > 0 && (
+            <div>
+              <h3 className="text-[0.75rem] uppercase tracking-wider text-[#7a8294] mb-3 font-medium">
+                Product · white background, soft shadow
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {productIndices.map((index) =>
+                  renderSlot(index, slotLabels[index] || `Product · ${index - modelCount + 1}`),
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       )}
 

@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
+import { DEFAULT_MODEL_PROMPT, DEFAULT_PRODUCT_PROMPT } from '../lib/promptDefaults';
 
 const API_BASE_URL = '/api';
 
-export default function PromptStudio({ 
-  currentPrompt, setCurrentPrompt,
-  modelCentric, setModelCentric,
-  enhancedProduct, setEnhancedProduct 
+const textareaClass =
+  'w-full resize-y leading-relaxed text-[0.85rem] border border-border-color rounded-lg p-3 bg-black/15 text-white focus:outline-none focus:border-brand';
+
+export default function PromptStudio({
+  masterPrompt,
+  setMasterPrompt,
+  modelPrompt,
+  setModelPrompt,
+  productPrompt,
+  setProductPrompt,
+  modelCentric,
+  setModelCentric,
+  enhancedProduct,
+  setEnhancedProduct,
 }) {
   const [prompts, setPrompts] = useState([]);
   const [currentTitle, setCurrentTitle] = useState('');
@@ -22,7 +33,7 @@ export default function PromptStudio({
           handleSelect(data[0]);
         }
       } else {
-        console.error("Backend returned non-array:", data);
+        console.error('Backend returned non-array:', data);
         setPrompts([]);
       }
     } catch (err) {
@@ -38,21 +49,25 @@ export default function PromptStudio({
   const handleSelect = (p) => {
     setActivePromptId(p.id);
     setCurrentTitle(p.title || '');
-    setCurrentPrompt(p.prompt);
+    setMasterPrompt(p.prompt || '');
+    setModelPrompt(p.modelPrompt || DEFAULT_MODEL_PROMPT);
+    setProductPrompt(p.productPrompt || DEFAULT_PRODUCT_PROMPT);
   };
 
   const handleSave = async () => {
-    if (!currentPrompt.trim() || !currentTitle.trim()) return;
+    if (!masterPrompt.trim() || !currentTitle.trim()) return;
     try {
       await fetch(`${API_BASE_URL}/prompts`, {
         method: 'POST',
-        headers: { 
+        headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          prompt: currentPrompt, 
+        body: JSON.stringify({
+          prompt: masterPrompt,
+          modelPrompt,
+          productPrompt,
           title: currentTitle,
-          id: activePromptId 
+          id: activePromptId,
         }),
       });
       fetchPrompts();
@@ -69,7 +84,9 @@ export default function PromptStudio({
       });
       setActivePromptId(null);
       setCurrentTitle('');
-      setCurrentPrompt('');
+      setMasterPrompt('');
+      setModelPrompt(DEFAULT_MODEL_PROMPT);
+      setProductPrompt(DEFAULT_PRODUCT_PROMPT);
       fetchPrompts();
     } catch (err) {
       console.error(err);
@@ -79,16 +96,23 @@ export default function PromptStudio({
   const handleAdd = () => {
     setActivePromptId(null);
     setCurrentTitle('');
-    setCurrentPrompt('');
+    setMasterPrompt('');
+    setModelPrompt(DEFAULT_MODEL_PROMPT);
+    setProductPrompt(DEFAULT_PRODUCT_PROMPT);
   };
 
   return (
     <div className="bg-bg-card border border-border-color rounded-[12px] p-8">
-      <div className="flex justify-between items-center cursor-pointer select-none" onClick={() => setIsCollapsed(!isCollapsed)}>
+      <div
+        className="flex justify-between items-center cursor-pointer select-none"
+        onClick={() => setIsCollapsed(!isCollapsed)}
+      >
         <div>
           <h2 className="text-xl font-semibold text-text-primary">Prompt lab</h2>
         </div>
-        <div className={`text-[1.2rem] text-text-secondary transition-transform duration-200 ${!isCollapsed ? 'rotate-180' : ''}`}>
+        <div
+          className={`text-[1.2rem] text-text-secondary transition-transform duration-200 ${!isCollapsed ? 'rotate-180' : ''}`}
+        >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -97,14 +121,13 @@ export default function PromptStudio({
 
       {!isCollapsed && (
         <div className="mt-6 fade-in">
-          
           <div className="flex gap-6 border-b border-white/5 pb-4">
             <div>
               <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">Model touch</label>
               <div className="flex items-center border-b border-border-color w-[90px] py-0.5 transition-colors duration-300 focus-within:border-brand">
                 <button className="bg-transparent text-[#7a8294] border-none cursor-pointer text-[1.1rem] px-2 select-none hover:text-white" onClick={() => setModelCentric(Math.max(0, modelCentric - 1))}>−</button>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="bg-transparent border-none text-white text-[0.95rem] w-full text-center focus:outline-none [-moz-appearance:textfield] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   value={modelCentric}
                   onChange={(e) => setModelCentric(Number(e.target.value) || 0)}
@@ -116,8 +139,8 @@ export default function PromptStudio({
               <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">Product focus</label>
               <div className="flex items-center border-b border-border-color w-[90px] py-0.5 transition-colors duration-300 focus-within:border-brand">
                 <button className="bg-transparent text-[#7a8294] border-none cursor-pointer text-[1.1rem] px-2 select-none hover:text-white" onClick={() => setEnhancedProduct(Math.max(0, enhancedProduct - 1))}>−</button>
-                <input 
-                  type="number" 
+                <input
+                  type="number"
                   className="bg-transparent border-none text-white text-[0.95rem] w-full text-center focus:outline-none [-moz-appearance:textfield] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   value={enhancedProduct}
                   onChange={(e) => setEnhancedProduct(Number(e.target.value) || 0)}
@@ -130,50 +153,89 @@ export default function PromptStudio({
           <div className="flex gap-6 mt-6 pb-0 border-none">
             <div className="flex-1">
               <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">Load Prompt</label>
-              <select 
+              <select
                 className="minimal-select w-full bg-transparent border-b border-border-color text-white text-[0.95rem] py-1 focus:outline-none focus:border-brand"
                 value={activePromptId || ''}
                 onChange={(e) => {
-                  const p = prompts.find(pr => String(pr.id) === e.target.value);
+                  const p = prompts.find((pr) => String(pr.id) === e.target.value);
                   if (p) handleSelect(p);
                 }}
               >
                 <option value="" disabled className="bg-bg-dark text-white">Custom</option>
-                {prompts.map(p => (
-                  <option key={p.id} value={p.id} className="bg-bg-dark text-white">{p.title}</option>
+                {prompts.map((p) => (
+                  <option key={p.id} value={p.id} className="bg-bg-dark text-white">
+                    {p.title}
+                  </option>
                 ))}
               </select>
             </div>
 
             <div className="flex-1">
               <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">Prompt name</label>
-              <input 
-                type="text" 
-                className="w-full bg-transparent border-none border-b border-border-color text-white text-[0.95rem] py-1 focus:outline-none focus:border-brand" 
-                value={currentTitle} 
+              <input
+                type="text"
+                className="w-full bg-transparent border-none border-b border-border-color text-white text-[0.95rem] py-1 focus:outline-none focus:border-brand"
+                value={currentTitle}
                 placeholder="E.g. Summer Collection"
                 onChange={(e) => setCurrentTitle(e.target.value)}
               />
             </div>
           </div>
 
-          <div className="mt-4">
-            <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">Master Prompt</label>
-            <textarea 
-              className="w-full resize-y leading-relaxed text-[0.85rem] border border-border-color rounded-lg p-3 bg-black/15 text-white focus:outline-none focus:border-brand"
-              rows={4}
-              placeholder="Describe the aesthetic..."
-              value={currentPrompt} 
-              onChange={(e) => setCurrentPrompt(e.target.value)}
-            ></textarea>
+          <div className="mt-4 space-y-4">
+            <div>
+              <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">
+                Master prompt
+              </label>
+              <p className="text-text-secondary text-[0.75rem] mb-2">Main theme — lighting, mood, and overall aesthetic for all shots.</p>
+              <textarea
+                className={textareaClass}
+                rows={3}
+                placeholder="E.g. Warm golden-hour lighting, soft cinematic shadows, luxury editorial…"
+                value={masterPrompt}
+                onChange={(e) => setMasterPrompt(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">
+                Model shot prompt
+              </label>
+              <p className="text-text-secondary text-[0.75rem] mb-2">Specifications for on-model images (framing, pose, what to show).</p>
+              <textarea
+                className={textareaClass}
+                rows={3}
+                placeholder="E.g. Chin-down crop, jewellery hero, shallow depth of field…"
+                value={modelPrompt}
+                onChange={(e) => setModelPrompt(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-1.5 font-medium">
+                Product shot prompt
+              </label>
+              <p className="text-text-secondary text-[0.75rem] mb-2">Specifications for packshot / white-background product images.</p>
+              <textarea
+                className={textareaClass}
+                rows={3}
+                placeholder="E.g. Pure white studio, soft shadow, unworn flat lay…"
+                value={productPrompt}
+                onChange={(e) => setProductPrompt(e.target.value)}
+              />
+            </div>
           </div>
-          
+
           <div className="flex gap-4 items-center mt-6 pt-4 border-t border-white/5">
-            <button className="bg-[#2a2e38] text-gray-300 border border-[#3b404d] px-5 py-2 rounded-full font-medium text-[0.85rem] cursor-pointer transition-all duration-200 hover:bg-[#373c47] hover:text-white hover:border-[#4a5060] hover:-translate-y-[1px]" onClick={handleSave}>Save changes</button>
-            <button className="bg-transparent text-text-secondary border-none text-[0.85rem] cursor-pointer transition-colors duration-200 hover:text-white" onClick={handleAdd}>+ New prompt</button>
+            <button className="bg-[#2a2e38] text-gray-300 border border-[#3b404d] px-5 py-2 rounded-full font-medium text-[0.85rem] cursor-pointer transition-all duration-200 hover:bg-[#373c47] hover:text-white hover:border-[#4a5060] hover:-translate-y-[1px]" onClick={handleSave}>
+              Save changes
+            </button>
+            <button className="bg-transparent text-text-secondary border-none text-[0.85rem] cursor-pointer transition-colors duration-200 hover:text-white" onClick={handleAdd}>
+              + New prompt
+            </button>
             {activePromptId && (
-              <button 
-                className="bg-transparent border-none text-[0.85rem] cursor-pointer transition-colors duration-200 ml-auto hover:text-red-400 text-red-500" 
+              <button
+                className="bg-transparent border-none text-[0.85rem] cursor-pointer transition-colors duration-200 ml-auto hover:text-red-400 text-red-500"
                 onClick={handleDelete}
               >
                 Delete
@@ -182,13 +244,11 @@ export default function PromptStudio({
           </div>
 
           <div className="mt-10">
-            <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-[1.25rem] font-medium">
-              Saved Library
-            </label>
+            <label className="block text-[0.7rem] uppercase tracking-wider text-[#7a8294] mb-[1.25rem] font-medium">Saved Library</label>
             <div className="flex flex-wrap gap-[0.85rem]">
               {prompts.map((p) => (
-                <button 
-                  key={p.id} 
+                <button
+                  key={p.id}
                   className={`px-5 py-2 rounded-full text-[0.85rem] cursor-pointer transition-all duration-200 ${String(activePromptId) === String(p.id) ? 'bg-brand text-white border border-brand' : 'bg-white/5 border border-white/10 text-text-secondary hover:bg-white/10 hover:text-white'}`}
                   onClick={() => handleSelect(p)}
                 >

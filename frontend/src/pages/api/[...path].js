@@ -1,0 +1,48 @@
+/**
+ * Proxy /api/* to the Fastify backend with a long timeout.
+ * Next.js rewrites time out on slow Gemini image generation (socket hang up).
+ */
+const BACKEND = process.env.BACKEND_URL || 'http://127.0.0.1:3011';
+const PROXY_TIMEOUT_MS = 5 * 60 * 1000;
+
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '50mb',
+    },
+  },
+};
+
+export default async function handler(req, res) {
+  const segments = req.query.path;
+  const path = Array.isArray(segments) ? segments.join('/') : segments || '';
+  const url = `${BACKEND}/${path}`;
+
+  try {
+    const upstream = await fetch(url, {
+      method: req.method,
+      headers: {
+        'content-type': req.headers['content-type'] || 'application/json',
+      },
+      body:
+        req.method === 'GET' || req.method === 'HEAD'
+          ? undefined
+          : JSON.stringify(req.body ?? {}),
+      signal: AbortSignal.timeout(PROXY_TIMEOUT_MS),
+    });
+
+    const body = await upstream.text();
+    res.status(upstream.status);
+    const contentType = upstream.headers.get('content-type');
+    if (contentType) {
+      res.setHeader('content-type', contentType);
+    }
+    res.send(body);
+  } catch (error) {
+    console.error('[api proxy]', path, error.message);
+    res.status(502).json({
+      error: 'Backend request failed',
+      detail: error.message,
+    });
+  }
+}

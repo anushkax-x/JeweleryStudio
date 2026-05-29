@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { enqueueGeneration } = require('./generationQueue');
 
 const PROMPTS_PATH = path.join(__dirname, 'prompts.json');
 
@@ -28,13 +29,15 @@ module.exports = function (fastify) {
 
   fastify.post('/prompts', async (request, reply) => {
     try {
-      const { prompt, title, id } = request.body;
+      const { prompt, modelPrompt, productPrompt, title, id } = request.body;
       const prompts = loadPrompts();
       const promptId = id != null && id !== '' ? String(id) : String(Date.now());
       const idx = prompts.findIndex((p) => String(p.id) === promptId);
       const promptData = {
         id: promptId,
         prompt,
+        modelPrompt: modelPrompt ?? '',
+        productPrompt: productPrompt ?? '',
         title: title || 'Untitled',
       };
       if (idx >= 0) {
@@ -73,11 +76,19 @@ module.exports = function (fastify) {
   });
 
   fastify.post('/generate-image', async (request, reply) => {
+    return enqueueGeneration(() => handleGenerateImage(request, reply));
+  });
+};
+
+async function handleGenerateImage(request, reply) {
     try {
       const {
         jewelleryImage,
         modelImage,
         prompt,
+        masterPrompt,
+        modelPrompt,
+        productPrompt,
         type,
         model,
         shotMode,
@@ -87,7 +98,9 @@ module.exports = function (fastify) {
         clientRunId,
       } = request.body;
 
-      const baseRaw = (prompt || 'Luxury jewellery').trim();
+      const masterRaw = (masterPrompt || prompt || 'Luxury jewellery').trim();
+      const modelSpecsRaw = (modelPrompt || '').trim();
+      const productSpecsRaw = (productPrompt || '').trim();
       const piece = type || 'jewellery';
 
       /** Strip words that make product shots drift toward worn/editorial imagery. */
@@ -128,18 +141,29 @@ module.exports = function (fastify) {
       let fullPrompt;
       if (shotMode === 'product') {
         const focus = (productFocus || 'Reproduce the uploaded jewellery accurately.').trim();
-        const style = sanitizeProductStyleNotes(baseRaw) || 'clean luxury finish';
+        const theme = sanitizeProductStyleNotes(masterRaw) || 'clean luxury finish';
+        const shotSpecs =
+          productSpecsRaw ||
+          'Studio packshot on pure white; unworn jewellery only; soft contact shadow.';
         fullPrompt = `${productShotExtra}
 
 CRITICAL: The reference may show a person or mixed layout — IGNORE that. Use the reference ONLY to copy the jewellery design, stones, and metal. Output must be a single packshot on pure white — not a composite, not a split, not worn.
 
 Subject: ${focus}
 Jewellery type context: ${piece}.
-Lighting / mood (packshot only): ${style}`;
+Overall theme / lighting: ${theme}
+Product shot specifications: ${shotSpecs}`;
       } else {
         const variation = (modelVariation || 'Chin-down crop; jewellery dominant.').trim();
-        const modelStyle = sanitizeModelStyleNotes(baseRaw) || baseRaw;
-        fullPrompt = `${modelStyle} ${modelShotExtra} Angle / pose: ${variation}`;
+        const theme = sanitizeModelStyleNotes(masterRaw) || masterRaw;
+        const shotSpecs =
+          modelSpecsRaw ||
+          'Editorial chin-down crop; jewellery as hero; one woman wearing the piece.';
+        fullPrompt = `${theme}
+
+Model shot specifications: ${shotSpecs}
+${modelShotExtra}
+Angle / pose: ${variation}`;
       }
 
       let imageUrl = null;
@@ -277,7 +301,7 @@ Lighting / mood (packshot only): ${style}`;
         };
       }
     } catch (err) {
-      fastify.log.error('Error generating image via SDK:', err);
+      request.server.log.error({ err }, 'Error generating image via SDK');
       const { clientSlotIndex, clientRunId } = request.body || {};
       return {
         imageUrl: `https://placehold.co/400x500/222/f00?text=Timeout+or+Error`,
@@ -286,5 +310,4 @@ Lighting / mood (packshot only): ${style}`;
           : {}),
       };
     }
-  });
-};
+}
