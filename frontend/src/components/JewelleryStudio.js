@@ -263,9 +263,46 @@ export default function JewelleryStudio({
   };
 
   const sectionPad = 'px-6 py-7 sm:px-8 sm:py-8';
+  const split = showResults;
 
-  return (
-    <div className="animate-slide-up space-y-5">
+  const galleryPanel = (
+    <Card className="!p-0 overflow-hidden shadow-inset lg:sticky lg:top-5 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
+      <div className="border-b border-line px-6 py-5 sm:px-8">
+        <h2 className="font-display text-[1.5rem] font-medium text-ink">Gallery</h2>
+      </div>
+      <div className="px-6 py-6 sm:px-8 sm:py-7">
+        {showLoader && (
+          <GenerationLoader
+            completed={generationProgress?.completed ?? 0}
+            total={generationProgress?.total ?? totalPics}
+            label={generationProgress?.label ?? ''}
+            startedAt={generationProgress?.startedAt}
+          />
+        )}
+        {modelCount > 0 && (
+          <div className={productCount > 0 ? 'mb-8' : ''}>
+            <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">Editorial</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {modelIndices.map((index) => renderSlot(index, slotLabels[index] || `Model ${index + 1}`))}
+            </div>
+          </div>
+        )}
+        {productCount > 0 && (
+          <div>
+            <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">Product</p>
+            <div className="grid grid-cols-2 gap-2.5">
+              {productIndices.map((index) =>
+                renderSlot(index, slotLabels[index] || `Product ${index - modelCount + 1}`),
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+
+  const formColumn = (
+    <div className={`space-y-5 ${split ? 'min-w-0' : 'mx-auto max-w-2xl'}`}>
       <Card className="overflow-hidden !p-0 shadow-inset">
         <section className={sectionPad}>
           <StepHeader step={1} title="References" />
@@ -290,18 +327,25 @@ export default function JewelleryStudio({
         <div className="studio-divider" />
 
         <section className={sectionPad}>
-          <StepHeader step={2} title="Piece" />
-          <label className="mb-1.5 block text-[0.65rem] font-medium uppercase tracking-[0.12em] text-subtle">
-            Type
-          </label>
-          <select className="minimal-select field-input" value={type} onChange={(e) => setType(e.target.value)}>
-            <option value="">Select…</option>
-            <option value="necklace">Necklace</option>
-            <option value="necklace_set">Necklace set</option>
-            <option value="earrings">Earrings</option>
-            <option value="ring">Ring</option>
-            <option value="bracelet">Bracelet</option>
-          </select>
+          <StepHeader step={2} title="Piece">
+            <div className="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3">
+              <label className="shrink-0 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-subtle">
+                Type
+              </label>
+              <select
+                className="minimal-select field-input min-w-0 sm:min-w-[11rem]"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+              >
+                <option value="">Select…</option>
+                <option value="necklace">Necklace</option>
+                <option value="necklace_set">Necklace set</option>
+                <option value="earrings">Earrings</option>
+                <option value="ring">Ring</option>
+                <option value="bracelet">Bracelet</option>
+              </select>
+            </div>
+          </StepHeader>
         </section>
 
         <div className="studio-divider" />
@@ -335,51 +379,16 @@ export default function JewelleryStudio({
           {isGenerating ? 'Generating…' : `Generate ${totalPics || 0} ${totalPics === 1 ? 'shot' : 'shots'}`}
         </button>
       </div>
+    </div>
+  );
 
-      {showResults && (
-        <Card className="!p-0 overflow-hidden">
-          <div className="border-b border-line px-6 py-5 sm:px-8">
-            <h2 className="font-display text-[1.5rem] font-medium text-ink">Gallery</h2>
-          </div>
+  return (
+    <div
+      className={`animate-slide-up ${split ? 'grid grid-cols-1 items-start gap-5 lg:grid-cols-2 lg:gap-6' : ''}`}
+    >
+      {formColumn}
 
-          <div className="px-6 py-6 sm:px-8 sm:py-7">
-            {showLoader && (
-              <GenerationLoader
-                completed={generationProgress?.completed ?? 0}
-                total={generationProgress?.total ?? totalPics}
-                label={generationProgress?.label ?? ''}
-                startedAt={generationProgress?.startedAt}
-              />
-            )}
-
-            {modelCount > 0 && (
-              <div className={productCount > 0 ? 'mb-8' : ''}>
-                <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">
-                  Editorial
-                </p>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
-                  {modelIndices.map((index) =>
-                    renderSlot(index, slotLabels[index] || `Model ${index + 1}`),
-                  )}
-                </div>
-              </div>
-            )}
-
-            {productCount > 0 && (
-              <div>
-                <p className="mb-3 text-[0.65rem] font-medium uppercase tracking-[0.14em] text-subtle">
-                  Product
-                </p>
-                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 sm:gap-3">
-                  {productIndices.map((index) =>
-                    renderSlot(index, slotLabels[index] || `Product ${index - modelCount + 1}`),
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </Card>
-      )}
+      {split && <div className="min-w-0 animate-slide-up">{galleryPanel}</div>}
 
       {enlargedImage && (
         <div

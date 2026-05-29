@@ -21,6 +21,7 @@ function FieldLabel({ children }) {
 
 export default function PromptStudio({
   embedded = false,
+  dense = false,
   masterPrompt,
   setMasterPrompt,
   modelPrompt,
@@ -139,19 +140,23 @@ export default function PromptStudio({
     setSaveStatus('');
   };
 
-  const field = 'field-input !py-2 !text-[0.84rem] !bg-[#faf9f7]';
-  const textarea = `${field} field-textarea !min-h-[4.5rem]`;
+  const field = dense
+    ? 'field-input !py-1.5 !text-[0.8rem] !bg-[#faf9f7]'
+    : 'field-input !py-2 !text-[0.84rem] !bg-[#faf9f7]';
+  const textarea = dense
+    ? `${field} field-textarea !min-h-[2.75rem] !leading-snug`
+    : `${field} field-textarea !min-h-[4.5rem]`;
 
   const embeddedBody = (
     <>
-      <StepHeader step={3} title="Prompt lab">
-        <div className="flex gap-5">
+      <StepHeader step={3} title="Prompt lab" compact={dense}>
+        <div className={dense ? 'flex gap-4' : 'flex gap-5'}>
           <Counter compact label="Model" value={modelCentric} onChange={setModelCentric} />
           <Counter compact label="Product" value={enhancedProduct} onChange={setEnhancedProduct} />
         </div>
       </StepHeader>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className={`grid grid-cols-2 gap-2 ${dense ? 'mb-2' : 'mb-4 gap-3'}`}>
         <div>
           <FieldLabel>Preset</FieldLabel>
           <select
@@ -184,7 +189,7 @@ export default function PromptStudio({
         </div>
       </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-2 sm:grid-cols-3 ${dense ? 'mb-2' : 'mb-4 gap-3'}`}>
         <div>
           <FieldLabel>Master</FieldLabel>
           <textarea
@@ -217,15 +222,17 @@ export default function PromptStudio({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className={`flex flex-wrap items-center ${dense ? 'gap-3' : 'gap-x-4 gap-y-2'}`}>
         <button
           type="button"
-          className="rounded-lg bg-canvas px-4 py-2 text-[0.78rem] font-medium text-ink ring-1 ring-line transition-colors hover:bg-surface"
+          className={`rounded-lg bg-canvas font-medium text-ink ring-1 ring-line transition-colors hover:bg-surface ${
+            dense ? 'px-3 py-1.5 text-[0.72rem]' : 'px-4 py-2 text-[0.78rem]'
+          }`}
           onClick={handleSave}
         >
-          Save preset
+          {dense ? 'Save' : 'Save preset'}
         </button>
-        <button type="button" className="btn-ghost" onClick={handleAdd}>
+        <button type="button" className={`btn-ghost ${dense ? 'text-[0.72rem]' : ''}`} onClick={handleAdd}>
           New
         </button>
         {saveStatus && (
@@ -240,7 +247,7 @@ export default function PromptStudio({
         )}
       </div>
 
-      {prompts.length > 1 && (
+      {prompts.length > 1 && !dense && (
         <div className="mt-4 flex flex-wrap gap-1.5 border-t border-line pt-4">
           {prompts.map((p) => (
             <button

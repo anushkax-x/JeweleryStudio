@@ -23,7 +23,7 @@ export default function Home() {
           aria-hidden
         />
 
-        <div className="relative mx-auto max-w-2xl px-5 pb-12 pt-6 sm:px-6 sm:pt-8">
+        <div className="relative mx-auto max-w-6xl px-5 pb-12 pt-6 sm:px-6 sm:pt-8">
           <header className="mb-6 grid grid-cols-1 items-end gap-4 sm:grid-cols-2 sm:gap-8">
             <div>
               <p className="text-[0.65rem] font-medium uppercase tracking-[0.28em] text-accent">
