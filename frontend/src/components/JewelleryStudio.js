@@ -5,6 +5,7 @@ import { compressImageFile } from '../lib/compressImage';
 import Card from './ui/Card';
 import SectionLabel from './ui/SectionLabel';
 import UploadZone from './ui/UploadZone';
+import PromptStudio from './PromptStudio';
 
 const API_BASE_URL = '/api';
 const PARALLEL_SLOTS = 2;
@@ -62,10 +63,15 @@ async function runPool(items, concurrency, worker) {
 
 export default function JewelleryStudio({
   masterPrompt,
+  setMasterPrompt,
   modelPrompt,
+  setModelPrompt,
   productPrompt,
+  setProductPrompt,
   modelCount = 0,
+  setModelCount,
   productCount = 0,
+  setProductCount,
 }) {
   const generationRunRef = useRef(0);
   const [jewelleryImage, setJewelleryImage] = useState(null);
@@ -324,10 +330,24 @@ export default function JewelleryStudio({
         </select>
       </Card>
 
+      <PromptStudio
+        embedded
+        masterPrompt={masterPrompt}
+        setMasterPrompt={setMasterPrompt}
+        modelPrompt={modelPrompt}
+        setModelPrompt={setModelPrompt}
+        productPrompt={productPrompt}
+        setProductPrompt={setProductPrompt}
+        modelCentric={modelCount}
+        setModelCentric={setModelCount}
+        enhancedProduct={productCount}
+        setEnhancedProduct={setProductCount}
+      />
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           {totalPics === 0 ? (
-            <p className="text-[0.85rem] text-muted">Set shot counts in Creative direction →</p>
+            <p className="text-[0.85rem] text-muted">Set at least one shot count in Prompt lab above</p>
           ) : (
             <p className="text-[0.85rem] text-muted">
               Ready to generate <span className="font-medium text-ink">{totalPics}</span> image

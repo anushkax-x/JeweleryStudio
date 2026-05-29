@@ -1,6 +1,5 @@
 import Head from 'next/head';
 import JewelleryStudio from '../components/JewelleryStudio';
-import PromptStudio from '../components/PromptStudio';
 import { useState } from 'react';
 import { DEFAULT_MODEL_PROMPT, DEFAULT_PRODUCT_PROMPT } from '../lib/promptDefaults';
 
@@ -48,29 +47,19 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="grid gap-8 lg:grid-cols-[1fr_380px] lg:gap-10 lg:items-start">
+          <div className="mx-auto max-w-3xl">
             <JewelleryStudio
               masterPrompt={masterPrompt}
+              setMasterPrompt={setMasterPrompt}
               modelPrompt={modelPrompt}
+              setModelPrompt={setModelPrompt}
               productPrompt={productPrompt}
+              setProductPrompt={setProductPrompt}
               modelCount={modelCentric}
+              setModelCount={setModelCentric}
               productCount={enhancedProduct}
+              setProductCount={setEnhancedProduct}
             />
-
-            <aside className="lg:sticky lg:top-8">
-              <PromptStudio
-                masterPrompt={masterPrompt}
-                setMasterPrompt={setMasterPrompt}
-                modelPrompt={modelPrompt}
-                setModelPrompt={setModelPrompt}
-                productPrompt={productPrompt}
-                setProductPrompt={setProductPrompt}
-                modelCentric={modelCentric}
-                setModelCentric={setModelCentric}
-                enhancedProduct={enhancedProduct}
-                setEnhancedProduct={setEnhancedProduct}
-              />
-            </aside>
           </div>
 
           <footer className="mt-16 border-t border-line pt-8 text-center text-[0.75rem] text-subtle">

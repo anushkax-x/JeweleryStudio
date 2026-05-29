@@ -13,7 +13,14 @@ function applyPromptToForm(p, setters) {
   setProductPrompt(p.productPrompt ?? DEFAULT_PRODUCT_PROMPT);
 }
 
+function CompactLabel({ children }) {
+  return (
+    <p className="mb-1 text-[0.65rem] font-medium uppercase tracking-[0.12em] text-subtle">{children}</p>
+  );
+}
+
 export default function PromptStudio({
+  embedded = false,
   masterPrompt,
   setMasterPrompt,
   modelPrompt,
@@ -132,8 +139,142 @@ export default function PromptStudio({
     setSaveStatus('');
   };
 
-  return (
-    <Card className="animate-slide-up">
+  const compactField = 'field-input !py-2 !text-[0.85rem]';
+  const compactTextarea = `${compactField} field-textarea !min-h-[52px]`;
+
+  const body = embedded ? (
+    <>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-ink text-[0.75rem] font-semibold text-surface">
+            3
+          </span>
+          <h2 className="font-display text-xl font-medium text-ink">Prompt lab</h2>
+        </div>
+        <div className="flex gap-6">
+          <Counter label="Model shots" value={modelCentric} onChange={setModelCentric} />
+          <Counter label="Product shots" value={enhancedProduct} onChange={setEnhancedProduct} />
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <CompactLabel>Preset</CompactLabel>
+          <select
+            className={`minimal-select ${compactField}`}
+            value={activePromptId || ''}
+            onChange={(e) => {
+              const p = prompts.find((pr) => String(pr.id) === e.target.value);
+              if (p) handleSelect(p);
+            }}
+          >
+            <option value="" disabled>
+              Choose preset…
+            </option>
+            {prompts.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.title}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <CompactLabel>Preset name</CompactLabel>
+          <input
+            type="text"
+            className={compactField}
+            value={currentTitle}
+            placeholder="Summer collection"
+            onChange={(e) => setCurrentTitle(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div>
+          <CompactLabel>Master</CompactLabel>
+          <textarea
+            className={compactTextarea}
+            rows={2}
+            placeholder="Lighting, mood…"
+            value={masterPrompt}
+            onChange={(e) => setMasterPrompt(e.target.value)}
+          />
+        </div>
+        <div>
+          <CompactLabel>Model</CompactLabel>
+          <textarea
+            className={compactTextarea}
+            rows={2}
+            placeholder="Framing, pose…"
+            value={modelPrompt}
+            onChange={(e) => setModelPrompt(e.target.value)}
+          />
+        </div>
+        <div>
+          <CompactLabel>Product</CompactLabel>
+          <textarea
+            className={compactTextarea}
+            rows={2}
+            placeholder="Packshot style…"
+            value={productPrompt}
+            onChange={(e) => setProductPrompt(e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-t border-line pt-4">
+        <button
+          type="button"
+          className="rounded-full bg-ink px-4 py-2 text-[0.8rem] font-medium text-surface transition-colors hover:bg-accent-hover"
+          onClick={handleSave}
+        >
+          Save preset
+        </button>
+        <button
+          type="button"
+          className="text-[0.8rem] text-muted transition-colors hover:text-ink"
+          onClick={handleAdd}
+        >
+          New
+        </button>
+        {saveStatus && (
+          <span className={`text-[0.75rem] ${saveStatus === 'Saved' ? 'text-success' : 'text-danger'}`}>
+            {saveStatus}
+          </span>
+        )}
+        {activePromptId && (
+          <button
+            type="button"
+            className="ml-auto text-[0.8rem] text-danger/80 hover:text-danger"
+            onClick={handleDelete}
+          >
+            Delete
+          </button>
+        )}
+      </div>
+
+      {prompts.length > 0 && (
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {prompts.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`rounded-full px-3 py-1 text-[0.75rem] transition-all ${
+                String(activePromptId) === String(p.id)
+                  ? 'bg-ink text-surface'
+                  : 'bg-canvas text-muted ring-1 ring-line hover:text-ink'
+              }`}
+              onClick={() => handleSelect(p)}
+            >
+              {p.title || 'Untitled'}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  ) : (
+    <>
       <div className="mb-6 border-b border-line pb-5">
         <p className="text-[0.7rem] font-medium uppercase tracking-[0.2em] text-accent">Creative direction</p>
         <h2 className="font-display mt-1 text-2xl font-medium text-ink">Prompt lab</h2>
@@ -144,7 +285,7 @@ export default function PromptStudio({
         <Counter label="Product shots" value={enhancedProduct} onChange={setEnhancedProduct} />
       </div>
 
-      <div className="mb-6 space-y-4">
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <SectionLabel>Preset</SectionLabel>
           <select
@@ -165,7 +306,6 @@ export default function PromptStudio({
             ))}
           </select>
         </div>
-
         <div>
           <SectionLabel>Preset name</SectionLabel>
           <input
@@ -189,7 +329,6 @@ export default function PromptStudio({
             onChange={(e) => setMasterPrompt(e.target.value)}
           />
         </div>
-
         <div>
           <SectionLabel hint="Framing and pose for on-model shots">Model</SectionLabel>
           <textarea
@@ -200,7 +339,6 @@ export default function PromptStudio({
             onChange={(e) => setModelPrompt(e.target.value)}
           />
         </div>
-
         <div>
           <SectionLabel hint="Packshot style on white">Product</SectionLabel>
           <textarea
@@ -265,6 +403,10 @@ export default function PromptStudio({
           </div>
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  return (
+    <Card className={embedded ? '!p-5' : 'animate-slide-up'}>{body}</Card>
   );
 }
